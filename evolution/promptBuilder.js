@@ -103,6 +103,7 @@ You MUST preserve:
 - the if __name__ == "__main__": block
 - the single print(json.dumps(output))
 You MAY change only the statements inside the function bodies and the concrete data values.
+analysis_stage(data) MUST still include real analysis using sum(...), len(...), and an if branch.
 
 import json
 
@@ -149,6 +150,10 @@ MANDATORY RULES:
 - You MUST NOT rename them
 - You MUST NOT skip any stage
 - You MUST NOT change execution order
+- analysis_stage(data) MUST calculate at least one value using sum(...)
+- analysis_stage(data) MUST calculate at least one value using len(...)
+- analysis_stage(data) MUST include at least one if branch based on the analyzed data
+- analysis_stage(data) MUST return computed analysis results, not passthrough input
 - You MUST NOT use trivial hardcoded lists such as [1, 2, 3] or [1, 2, 3, 4] as the main dataset
 - input_stage() MUST create deterministic structured data using range(), records, or derived values instead of a static simple list literal
 - You MUST NOT print anything except inside output_stage
@@ -297,6 +302,7 @@ STRICT PIPELINE ENFORCEMENT:
 - main() MUST call them in this exact order:
   input_stage() -> transformation_stage(data) -> analysis_stage(data) -> output_stage(data)
 - Data returned from each stage MUST be passed into the next stage in order
+- analysis_stage(data) MUST contain sum(...), len(...), and at least one if branch
 - Do NOT rename, merge, skip, or reorder any stage
 - output_stage(data) MUST create the final output object
 - output_stage(data) MUST contain the only print(json.dumps(output))

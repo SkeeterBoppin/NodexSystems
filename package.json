@@ -1,0 +1,14 @@
+﻿{
+  "name": "nodex-local",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local-first modular Nodex execution system",
+  "main": "nodex.js",
+  "scripts": {
+    "start": "node nodex.js",
+    "evolve": "node evolve.js",
+    "execute": "node execute.js",
+    "audit": "node audit.js",
+    "test": "node tests/run.js"
+  }
+}

@@ -1,0 +1,8 @@
+﻿node_modules/
+Sandbox/
+*.log
+execution.txt
+execution_summary.txt
+audit.txt
+memory/long_term.json
+memory/CURRENT_STATE.json

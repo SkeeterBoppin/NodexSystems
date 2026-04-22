@@ -1,30 +1,60 @@
-﻿function cleanEvolutionOutput(evolution) {
-  let cleaned = evolution
+function cleanEvolutionOutput(evolution) {
+  const lines = String(evolution || "")
     .replace(/```python/g, "")
     .replace(/```/g, "")
-    .trim();
+    .split(/\r?\n/);
 
-  const start = cleaned.indexOf("import json");
-  const pipelineStart = cleaned.indexOf("def input_stage");
-  const endMarker = 'if __name__ == "__main__":';
+  const isPythonStart = (line) => {
+    const trimmed = line.trim();
+    return (
+      trimmed === "import json" ||
+      trimmed.startsWith("def input_stage") ||
+      trimmed.startsWith("def transformation_stage") ||
+      trimmed.startsWith("def analysis_stage") ||
+      trimmed.startsWith("def output_stage") ||
+      trimmed.startsWith("def main") ||
+      trimmed.startsWith('if __name__ == "__main__":')
+    );
+  };
 
-  let startIndex = -1;
-  if (start !== -1) startIndex = start;
-  else if (pipelineStart !== -1) startIndex = pipelineStart;
-
-  if (startIndex !== -1) {
-    cleaned = cleaned.slice(startIndex);
+  const startIndex = lines.findIndex(isPythonStart);
+  if (startIndex === -1) {
+    return String(evolution || "")
+      .replace(/```python/g, "")
+      .replace(/```/g, "")
+      .trim();
   }
 
-  const endIndex = cleaned.indexOf(endMarker);
-  if (endIndex !== -1) {
-    const mainCallIndex = cleaned.indexOf("main()", endIndex);
-    if (mainCallIndex !== -1) {
-      cleaned = cleaned.slice(0, mainCallIndex + "main()".length);
+  let cleanedLines = lines.slice(startIndex);
+
+  const entryIndex = cleanedLines.findIndex(
+    (line) => line.trim() === 'if __name__ == "__main__":'
+  );
+
+  if (entryIndex !== -1) {
+    let endIndex = entryIndex;
+
+    for (let i = entryIndex + 1; i < cleanedLines.length; i++) {
+      const line = cleanedLines[i];
+      const trimmed = line.trim();
+
+      if (!trimmed) {
+        endIndex = i;
+        continue;
+      }
+
+      if (/^( {4}|\t)main\(\)\s*$/.test(line)) {
+        endIndex = i;
+        continue;
+      }
+
+      break;
     }
+
+    cleanedLines = cleanedLines.slice(0, endIndex + 1);
   }
 
-  return cleaned.trim();
+  return cleanedLines.join("\n").trim();
 }
 
 function validateEvolution(evolution) {

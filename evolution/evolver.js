@@ -350,6 +350,8 @@ async function runEvolution({ maxAttempts = 999, successThreshold = 25, parallel
     let learningState = loadLearningState();
     let score = 0;
     let publishedEvolution = "";
+    let consecutiveQualifiedRuns = 0;
+    const REQUIRED_CONSECUTIVE_SUCCESSES = 3;
 
     while (true) {
       score = 0;
@@ -408,15 +410,37 @@ async function runEvolution({ maxAttempts = 999, successThreshold = 25, parallel
       pastFailures = best.status === "success" ? "" : best.failureReason || pastFailures;
       successMemory = best.status === "success" ? best.evolution || successMemory : successMemory;
 
+      const publishEligible =
+        best.status === "success" &&
+        Number(best.score || 0) >= Number(publishConfidence.threshold || 0);
+
+      if (publishEligible) {
+        consecutiveQualifiedRuns += 1;
+      } else {
+        consecutiveQualifiedRuns = 0;
+      }
+
       if (best.status === "success") {
-        const published = publishBestCandidate(best, { publishThreshold: publishConfidence.threshold });
-        if (published) {
-          publishedEvolution = best.evolution || "";
-          console.log("Success - finalizing");
-          break;
+        console.log(
+          `Reliability gate: publishEligible=${publishEligible} streak=${consecutiveQualifiedRuns}/${REQUIRED_CONSECUTIVE_SUCCESSES}`
+        );
+
+        if (publishEligible && consecutiveQualifiedRuns >= REQUIRED_CONSECUTIVE_SUCCESSES) {
+          const published = publishBestCandidate(best, { publishThreshold: publishConfidence.threshold });
+          if (published) {
+            publishedEvolution = best.evolution || "";
+            console.log("Success - finalizing");
+            break;
+          }
+        } else if (publishEligible) {
+          console.log(
+            `Qualified run, but reliability gate not yet met (${consecutiveQualifiedRuns}/${REQUIRED_CONSECUTIVE_SUCCESSES}). Previous best preserved.`
+          );
         }
       } else if (best.status === "hold") {
-        console.log(`Candidate held back: score ${best.score} did not clear publish threshold ${publishConfidence.threshold}. Previous best remains active.`);
+        console.log(
+          `Candidate held back: score ${best.score} did not clear publish threshold ${publishConfidence.threshold}. Previous best remains active.`
+        );
       }
     }
 

@@ -11,7 +11,9 @@ audit.txt
 CODEX_CONTEXT.txt
 CONTEXT_SNAPSHOT.json
 evolution.txt
-memory/
+
+# Memory runtime artifacts only (NOT source)
+memory/*.json
 
 # Generated learning/runtime artifacts only
 Learning/state/

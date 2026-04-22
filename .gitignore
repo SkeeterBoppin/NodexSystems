@@ -11,6 +11,7 @@ audit.txt
 CODEX_CONTEXT.txt
 CONTEXT_SNAPSHOT.json
 evolution.txt
+memory/
 
 # Generated learning/runtime artifacts only
 Learning/state/

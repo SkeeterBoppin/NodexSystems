@@ -96,7 +96,13 @@ import json
 
 You MUST output ONLY valid Python code.
 
-Your code MUST include ALL of the following functions exactly:
+Copy the following skeleton exactly.
+You MUST preserve:
+- import json as the first line
+- each def line exactly as written
+- the if __name__ == "__main__": block
+- the single print(json.dumps(output))
+You MAY change only the statements inside the function bodies and the concrete data values.
 
 import json
 
@@ -132,7 +138,14 @@ if __name__ == "__main__":
     main()
 
 MANDATORY RULES:
+- The following lines MUST appear verbatim in the final output:
+  def input_stage():
+  def transformation_stage(data):
+  def analysis_stage(data):
+  def output_stage(data):
+  def main():
 - You MUST define ALL five functions exactly as named above
+- You MUST start from the skeleton above and keep those exact function definition lines unchanged
 - You MUST NOT rename them
 - You MUST NOT skip any stage
 - You MUST NOT change execution order

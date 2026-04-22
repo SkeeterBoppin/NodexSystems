@@ -1,8 +1,21 @@
-﻿node_modules/
+﻿# Dependencies
+node_modules/
+
+# Sandbox / execution artifacts
 Sandbox/
-*.log
 execution.txt
 execution_summary.txt
 audit.txt
-memory/long_term.json
-memory/CURRENT_STATE.json
+
+# Runtime / evolving system state
+CODEX_CONTEXT.txt
+CONTEXT_SNAPSHOT.json
+evolution.txt
+
+# Generated learning/runtime artifacts only
+Learning/state/
+Learning/runs/
+Learning/live_snapshot.json
+
+# Logs
+*.log

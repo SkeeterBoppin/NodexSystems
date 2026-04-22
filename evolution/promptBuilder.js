@@ -91,8 +91,14 @@ function buildEvolutionPrompt({
 return `
 STRICT OUTPUT CONTRACT (HIGHEST PRIORITY — MUST FOLLOW)
 
-Your output MUST begin EXACTLY with this line:
+The response MUST begin directly with Python code.
+The very first line MUST be EXACTLY:
 import json
+
+No prose before the code is allowed.
+No headers before the code are allowed.
+No explanations before the code are allowed.
+No markdown fences are allowed.
 
 You MUST output ONLY valid Python code.
 
@@ -103,6 +109,7 @@ You MUST preserve:
 - the if __name__ == "__main__": block
 - the single print(json.dumps(output))
 You MAY change only the statements inside the function bodies and the concrete data values.
+Even when changing domain or problem, the final code MUST preserve the full five-stage skeleton.
 analysis_stage(data) MUST still include real analysis using sum(...), len(...), and an if branch.
 
 import json
@@ -145,11 +152,13 @@ MANDATORY RULES:
   def analysis_stage(data):
   def output_stage(data):
   def main():
+- All five function definitions MUST appear in the final code
 - You MUST define ALL five functions exactly as named above
 - You MUST start from the skeleton above and keep those exact function definition lines unchanged
 - You MUST NOT rename them
 - You MUST NOT skip any stage
 - You MUST NOT change execution order
+- main() MUST call input_stage(), transformation_stage(data), analysis_stage(data), and output_stage(data) in order
 - analysis_stage(data) MUST calculate at least one value using sum(...)
 - analysis_stage(data) MUST calculate at least one value using len(...)
 - analysis_stage(data) MUST include at least one if branch based on the analyzed data
@@ -159,7 +168,17 @@ MANDATORY RULES:
 - You MUST NOT print anything except inside output_stage
 - You MUST output EXACTLY one print(json.dumps(output))
 - You MUST NOT output ANY text before "import json"
+- The response MUST end immediately after:
+  if __name__ == "__main__":
+      main()
 - You MUST NOT output ANY text after the code
+
+INVALID EXAMPLES (ALL REJECTED):
+- Omitting any one of: input_stage, transformation_stage, analysis_stage, output_stage, main
+- Collapsing multiple stages into fewer functions
+- Writing only top-level script code instead of the required five-function skeleton
+- Explanatory text before the code
+- Explanatory text after the code
 
 If ANY rule is violated -> output is rejected
 
@@ -293,24 +312,11 @@ COMPLEXITY ENFORCEMENT:
 Your solution MUST implement the required five-stage pipeline.
 
 STRICT PIPELINE ENFORCEMENT:
-- You MUST define exactly these functions with these exact signatures:
-  def input_stage():
-  def transformation_stage(data):
-  def analysis_stage(data):
-  def output_stage(data):
-  def main():
-- main() MUST call them in this exact order:
-  input_stage() -> transformation_stage(data) -> analysis_stage(data) -> output_stage(data)
-- Data returned from each stage MUST be passed into the next stage in order
+- Preserve the exact five-function skeleton defined in the STRICT OUTPUT CONTRACT above
+- All five required stages must remain present and in order
 - analysis_stage(data) MUST contain sum(...), len(...), and at least one if branch
-- Do NOT rename, merge, skip, or reorder any stage
-- output_stage(data) MUST create the final output object
 - output_stage(data) MUST contain the only print(json.dumps(output))
-- The program MUST contain exactly ONE print(json.dumps(output))
 - No other print statements are allowed
-- The file MUST end by calling main() through:
-  if __name__ == "__main__":
-      main()
 
 If this is not satisfied:
 -> the system will reject your output
@@ -330,14 +336,6 @@ If execution fails due to missing module:
 Example:
 jsonschema -> replace with manual validation logic
 Do NOT require external packages unless explicitly installed.
--------------------------
-Return ONLY:
-PREFERENCES:
-- concrete, minimal abstraction
-STRATEGIES:
-- MUST follow format AND reasoning rules
-CORE:
-- only if necessary
 -------------------------
 ATTEMPT NUMBER: ${attempt}
 ADAPTATION RULE:

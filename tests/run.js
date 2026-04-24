@@ -32,7 +32,7 @@ const { selectBestCandidate } = require("../evolution/evolver");
 
 async function testRegistry() {
   const registry = createRegistry();
-  ["image", "video", "audio", "code", "ffmpeg"].forEach(name => {
+  ["image", "video", "audio", "code", "ffmpeg", "math"].forEach(name => {
     assert(registry.has(name), `missing tool: ${name}`);
   });
 }
@@ -103,12 +103,44 @@ async function testRouterUnknownTool() {
   assert(result.error.includes("Unknown tool"));
 }
 
+async function testMathRouteAdd() {
+  const result = await routeTask({ tool: "math", input: { operation: "add", operands: [2, 3] } });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.result, 5);
+  assert.strictEqual(payload.operation, "add");
+}
+
+async function testMathRouteConstantPi() {
+  const result = await routeTask({ tool: "math", input: { operation: "constant", constant: "pi" } });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert(Math.abs(payload.result - Math.PI) < 1e-12);
+  assert.strictEqual(payload.operation, "constant");
+}
+
+async function testMathRouteDivideByZero() {
+  const result = await routeTask({ tool: "math", input: { operation: "divide", operands: [8, 0] } });
+  assert.strictEqual(result.status, "error");
+  assert(result.error.includes("divide by zero"));
+}
+
+async function testMathRouteUnknownOperation() {
+  const result = await routeTask({ tool: "math", input: { operation: "matrix", operands: [1, 2] } });
+  assert.strictEqual(result.status, "error");
+  assert(result.error.includes("Unknown math operation"));
+}
+
 function testFallbackRouting() {
   assert.strictEqual(fallbackDecision("generate an image of a workstation").tool, "image");
   assert.strictEqual(fallbackDecision("make a video animation").tool, "video");
   assert.strictEqual(fallbackDecision("create TTS narration").tool, "audio");
   assert.strictEqual(fallbackDecision("ffmpeg combine clips").tool, "ffmpeg");
-  assert.strictEqual(fallbackDecision("run python logic").tool, "code");
+  assert.strictEqual(fallbackDecision("run python logic").tool, "execute_python");
 }
 
 function testPythonSandboxSafeExecution() {
@@ -339,6 +371,10 @@ async function run() {
   testAstSafetyBlocks();
   testAuditorRejectsInvalidText();
   await testRouterUnknownTool();
+  await testMathRouteAdd();
+  await testMathRouteConstantPi();
+  await testMathRouteDivideByZero();
+  await testMathRouteUnknownOperation();
   testFallbackRouting();
   testPythonSandboxSafeExecution();
   testSandboxAllowsInternalOpen();

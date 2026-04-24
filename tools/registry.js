@@ -2,6 +2,7 @@ const imageTool = require("./imageTool");
 const videoTool = require("./videoTool");
 const audioTool = require("./audioTool");
 const ffmpegTool = require("./ffmpegTool");
+const mathTool = require("./mathTool");
 const pythonTool = require("./pythonTool");
 const readFileTool = require("./readFileTool");
 const writeFileTool = require("./writeFileTool");
@@ -70,6 +71,19 @@ function createRegistry() {
       tool: ffmpegTool,
       inputs: { prompt: "string" },
       outputs: { output: "string" }
+    }),
+    createToolDefinition({
+      key: "math",
+      aliases: ["unit_math", "compute"],
+      tool: mathTool,
+      inputs: {
+        operation: "add|subtract|multiply|divide|power|sqrt|abs|round|constant",
+        operands: "number[]",
+        value: "number",
+        constant: "pi|e",
+        decimals: "number"
+      },
+      outputs: { output: "string", data: "object" }
     }),
     createToolDefinition({
       key: "execute_python",

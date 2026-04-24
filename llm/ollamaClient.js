@@ -22,13 +22,20 @@ function generate({
   path = "/api/generate",
   apiKey = "",
   retries = 3,
-  retryDelayMs = 1000
+  retryDelayMs = 1000,
+  numCtx = Number(process.env.NODEX_OLLAMA_NUM_CTX || 8192)
 }) {
   return new Promise((resolve, reject) => {
     let attempts = 0;
 
     const makeRequest = () => {
-      const requestData = JSON.stringify({ model, prompt });
+      const requestData = JSON.stringify({
+        model,
+        prompt,
+        options: {
+          num_ctx: numCtx
+        }
+      });
       const headers = {
         "Content-Type": "application/json",
         "Content-Length": Buffer.byteLength(requestData)

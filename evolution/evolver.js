@@ -310,6 +310,10 @@ function phaseRank(phase = "generation") {
   return 0;
 }
 
+function normalizeEvolutionSignature(evolution = "") {
+  return String(evolution || "").replace(/\r\n/g, "\n").trim();
+}
+
 function selectBestCandidate(records = []) {
   return records
     .slice()
@@ -351,6 +355,7 @@ async function runEvolution({ maxAttempts = 999, successThreshold = 25, parallel
     let score = 0;
     let publishedEvolution = "";
     let consecutiveQualifiedRuns = 0;
+    let lastQualifiedEvolutionSignature = "";
     const REQUIRED_CONSECUTIVE_SUCCESSES = 3;
 
     while (true) {
@@ -413,16 +418,30 @@ async function runEvolution({ maxAttempts = 999, successThreshold = 25, parallel
       const publishEligible =
         best.status === "success" &&
         Number(best.score || 0) >= Number(publishConfidence.threshold || 0);
+      const qualifiedEvolutionSignature = publishEligible
+        ? normalizeEvolutionSignature(best.evolution || "")
+        : "";
+
+      const artifactMatched =
+        publishEligible &&
+        !!lastQualifiedEvolutionSignature &&
+        qualifiedEvolutionSignature === lastQualifiedEvolutionSignature;
 
       if (publishEligible) {
-        consecutiveQualifiedRuns += 1;
+        if (artifactMatched) {
+          consecutiveQualifiedRuns += 1;
+        } else {
+          consecutiveQualifiedRuns = 1;
+          lastQualifiedEvolutionSignature = qualifiedEvolutionSignature;
+        }
       } else {
         consecutiveQualifiedRuns = 0;
+        lastQualifiedEvolutionSignature = "";
       }
 
       if (best.status === "success") {
         console.log(
-          `Reliability gate: publishEligible=${publishEligible} streak=${consecutiveQualifiedRuns}/${REQUIRED_CONSECUTIVE_SUCCESSES}`
+          `Reliability gate: publishEligible=${publishEligible} artifactMatched=${artifactMatched} streak=${consecutiveQualifiedRuns}/${REQUIRED_CONSECUTIVE_SUCCESSES}`
         );
 
         if (publishEligible && consecutiveQualifiedRuns >= REQUIRED_CONSECUTIVE_SUCCESSES) {

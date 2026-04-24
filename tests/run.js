@@ -36,7 +36,7 @@ function assertApproximatelyEqual(actual, expected, tolerance = 1e-12) {
 
 async function testRegistry() {
   const registry = createRegistry();
-  ["image", "video", "audio", "code", "ffmpeg", "math", "geometry", "unit"].forEach(name => {
+  ["image", "video", "audio", "code", "ffmpeg", "math", "geometry", "unit", "trig"].forEach(name => {
     assert(registry.has(name), `missing tool: ${name}`);
   });
 }
@@ -270,6 +270,96 @@ async function testGeometryRouteUnknownOperation() {
   const result = await routeTask({ tool: "geometry", input: { operation: "polygon_area", sides: 5 } });
   assert.strictEqual(result.status, "error");
   assert(result.error.includes("Unknown geometry operation"));
+}
+
+async function testTrigRouteSinDegrees() {
+  const result = await routeTask({ tool: "trig", input: { operation: "sin", angle: 90, angleUnit: "deg" } });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.operation, "sin");
+  assert.strictEqual(payload.angle, 90);
+  assert.strictEqual(payload.angleUnit, "deg");
+  assertApproximatelyEqual(payload.result, 1);
+}
+
+async function testTrigRouteCosRadians() {
+  const result = await routeTask({ tool: "trig", input: { operation: "cos", angle: Math.PI, angleUnit: "rad" } });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.operation, "cos");
+  assert.strictEqual(payload.angle, Math.PI);
+  assert.strictEqual(payload.angleUnit, "rad");
+  assertApproximatelyEqual(payload.result, -1);
+}
+
+async function testTrigRouteTanDegrees() {
+  const result = await routeTask({ tool: "trig", input: { operation: "tan", angle: 45, angleUnit: "deg" } });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.operation, "tan");
+  assert.strictEqual(payload.angle, 45);
+  assert.strictEqual(payload.angleUnit, "deg");
+  assertApproximatelyEqual(payload.result, 1);
+}
+
+async function testTrigRouteAsinDegrees() {
+  const result = await routeTask({ tool: "trig", input: { operation: "asin", value: 1, resultUnit: "deg" } });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.operation, "asin");
+  assert.strictEqual(payload.value, 1);
+  assert.strictEqual(payload.resultUnit, "deg");
+  assertApproximatelyEqual(payload.result, 90);
+}
+
+async function testTrigRouteAcosRadians() {
+  const result = await routeTask({ tool: "trig", input: { operation: "acos", value: 1, resultUnit: "rad" } });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.operation, "acos");
+  assert.strictEqual(payload.value, 1);
+  assert.strictEqual(payload.resultUnit, "rad");
+  assertApproximatelyEqual(payload.result, 0);
+}
+
+async function testTrigRouteAtanDegrees() {
+  const result = await routeTask({ tool: "trig", input: { operation: "atan", value: 1, resultUnit: "deg" } });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.operation, "atan");
+  assert.strictEqual(payload.value, 1);
+  assert.strictEqual(payload.resultUnit, "deg");
+  assertApproximatelyEqual(payload.result, 45);
+}
+
+async function testTrigRouteTanSingularAngle() {
+  const result = await routeTask({ tool: "trig", input: { operation: "tan", angle: 90, angleUnit: "deg" } });
+  assert.strictEqual(result.status, "error");
+  assert(result.error.includes("tan"));
+}
+
+async function testTrigRouteAsinOutOfRange() {
+  const result = await routeTask({ tool: "trig", input: { operation: "asin", value: 2, resultUnit: "rad" } });
+  assert.strictEqual(result.status, "error");
+  assert(result.error.includes("[-1, 1]"));
+}
+
+async function testTrigRouteUnknownOperation() {
+  const result = await routeTask({ tool: "trig", input: { operation: "sec", angle: 1, angleUnit: "rad" } });
+  assert.strictEqual(result.status, "error");
+  assert(result.error.includes("Unknown trig operation"));
 }
 
 function testFallbackRouting() {
@@ -526,6 +616,15 @@ async function run() {
   await testGeometryRouteDistance2d();
   await testGeometryRouteNegativeRadius();
   await testGeometryRouteUnknownOperation();
+  await testTrigRouteSinDegrees();
+  await testTrigRouteCosRadians();
+  await testTrigRouteTanDegrees();
+  await testTrigRouteAsinDegrees();
+  await testTrigRouteAcosRadians();
+  await testTrigRouteAtanDegrees();
+  await testTrigRouteTanSingularAngle();
+  await testTrigRouteAsinOutOfRange();
+  await testTrigRouteUnknownOperation();
   testFallbackRouting();
   testPythonSandboxSafeExecution();
   testSandboxAllowsInternalOpen();

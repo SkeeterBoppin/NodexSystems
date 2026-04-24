@@ -5,6 +5,7 @@ const ffmpegTool = require("./ffmpegTool");
 const mathTool = require("./mathTool");
 const geometryTool = require("./geometryTool");
 const unitTool = require("./unitTool");
+const trigTool = require("./trigTool");
 const pythonTool = require("./pythonTool");
 const readFileTool = require("./readFileTool");
 const writeFileTool = require("./writeFileTool");
@@ -115,6 +116,19 @@ function createRegistry() {
         value: "number",
         from: "string",
         to: "string"
+      },
+      outputs: { output: "string", data: "object" }
+    }),
+    createToolDefinition({
+      key: "trig",
+      aliases: ["trigonometry"],
+      tool: trigTool,
+      inputs: {
+        operation: "sin|cos|tan|asin|acos|atan",
+        angle: "number",
+        angleUnit: "rad|deg",
+        value: "number",
+        resultUnit: "rad|deg"
       },
       outputs: { output: "string", data: "object" }
     }),

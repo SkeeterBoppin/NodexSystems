@@ -3,6 +3,7 @@ const videoTool = require("./videoTool");
 const audioTool = require("./audioTool");
 const ffmpegTool = require("./ffmpegTool");
 const mathTool = require("./mathTool");
+const geometryTool = require("./geometryTool");
 const unitTool = require("./unitTool");
 const pythonTool = require("./pythonTool");
 const readFileTool = require("./readFileTool");
@@ -83,6 +84,25 @@ function createRegistry() {
         value: "number",
         constant: "pi|e",
         decimals: "number"
+      },
+      outputs: { output: "string", data: "object" }
+    }),
+    createToolDefinition({
+      key: "geometry",
+      aliases: ["geo"],
+      tool: geometryTool,
+      inputs: {
+        operation: "circle_area|circle_circumference|rectangle_area|triangle_area|right_triangle_hypotenuse|distance_2d",
+        radius: "number",
+        width: "number",
+        height: "number",
+        base: "number",
+        a: "number",
+        b: "number",
+        x1: "number",
+        y1: "number",
+        x2: "number",
+        y2: "number"
       },
       outputs: { output: "string", data: "object" }
     }),

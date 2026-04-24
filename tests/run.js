@@ -30,9 +30,13 @@ const {
 const { scoreExecutionMetrics } = require("../evolution/scorer");
 const { selectBestCandidate } = require("../evolution/evolver");
 
+function assertApproximatelyEqual(actual, expected, tolerance = 1e-12) {
+  assert(Math.abs(actual - expected) < tolerance, `expected ${actual} to be within ${tolerance} of ${expected}`);
+}
+
 async function testRegistry() {
   const registry = createRegistry();
-  ["image", "video", "audio", "code", "ffmpeg", "math", "unit"].forEach(name => {
+  ["image", "video", "audio", "code", "ffmpeg", "math", "geometry", "unit"].forEach(name => {
     assert(registry.has(name), `missing tool: ${name}`);
   });
 }
@@ -191,6 +195,81 @@ async function testUnitRouteUnknownUnit() {
   const result = await routeTask({ tool: "unit", input: { operation: "convert", value: 1, from: "parsec", to: "m" } });
   assert.strictEqual(result.status, "error");
   assert(result.error.includes("Unknown from unit"));
+}
+
+async function testGeometryRouteCircleArea() {
+  const result = await routeTask({ tool: "geometry", input: { operation: "circle_area", radius: 2 } });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.operation, "circle_area");
+  assertApproximatelyEqual(payload.result, 4 * Math.PI);
+}
+
+async function testGeometryRouteCircleCircumference() {
+  const result = await routeTask({ tool: "geometry", input: { operation: "circle_circumference", radius: 2 } });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.operation, "circle_circumference");
+  assertApproximatelyEqual(payload.result, 4 * Math.PI);
+}
+
+async function testGeometryRouteRectangleArea() {
+  const result = await routeTask({ tool: "geometry", input: { operation: "rectangle_area", width: 3, height: 4 } });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.operation, "rectangle_area");
+  assert.strictEqual(payload.result, 12);
+}
+
+async function testGeometryRouteTriangleArea() {
+  const result = await routeTask({ tool: "geometry", input: { operation: "triangle_area", base: 10, height: 5 } });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.operation, "triangle_area");
+  assert.strictEqual(payload.result, 25);
+}
+
+async function testGeometryRouteRightTriangleHypotenuse() {
+  const result = await routeTask({ tool: "geometry", input: { operation: "right_triangle_hypotenuse", a: 3, b: 4 } });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.operation, "right_triangle_hypotenuse");
+  assert.strictEqual(payload.result, 5);
+}
+
+async function testGeometryRouteDistance2d() {
+  const result = await routeTask({
+    tool: "geometry",
+    input: { operation: "distance_2d", x1: 0, y1: 0, x2: 3, y2: 4 }
+  });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.operation, "distance_2d");
+  assert.strictEqual(payload.result, 5);
+}
+
+async function testGeometryRouteNegativeRadius() {
+  const result = await routeTask({ tool: "geometry", input: { operation: "circle_area", radius: -1 } });
+  assert.strictEqual(result.status, "error");
+  assert(result.error.includes("radius"));
+}
+
+async function testGeometryRouteUnknownOperation() {
+  const result = await routeTask({ tool: "geometry", input: { operation: "polygon_area", sides: 5 } });
+  assert.strictEqual(result.status, "error");
+  assert(result.error.includes("Unknown geometry operation"));
 }
 
 function testFallbackRouting() {
@@ -439,6 +518,14 @@ async function run() {
   await testUnitRouteAngleConversion();
   await testUnitRouteIncompatibleConversion();
   await testUnitRouteUnknownUnit();
+  await testGeometryRouteCircleArea();
+  await testGeometryRouteCircleCircumference();
+  await testGeometryRouteRectangleArea();
+  await testGeometryRouteTriangleArea();
+  await testGeometryRouteRightTriangleHypotenuse();
+  await testGeometryRouteDistance2d();
+  await testGeometryRouteNegativeRadius();
+  await testGeometryRouteUnknownOperation();
   testFallbackRouting();
   testPythonSandboxSafeExecution();
   testSandboxAllowsInternalOpen();

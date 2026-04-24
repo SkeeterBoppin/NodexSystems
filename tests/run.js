@@ -32,7 +32,7 @@ const { selectBestCandidate } = require("../evolution/evolver");
 
 async function testRegistry() {
   const registry = createRegistry();
-  ["image", "video", "audio", "code", "ffmpeg", "math"].forEach(name => {
+  ["image", "video", "audio", "code", "ffmpeg", "math", "unit"].forEach(name => {
     assert(registry.has(name), `missing tool: ${name}`);
   });
 }
@@ -133,6 +133,64 @@ async function testMathRouteUnknownOperation() {
   const result = await routeTask({ tool: "math", input: { operation: "matrix", operands: [1, 2] } });
   assert.strictEqual(result.status, "error");
   assert(result.error.includes("Unknown math operation"));
+}
+
+async function testUnitRouteLengthConversion() {
+  const result = await routeTask({ tool: "unit", input: { operation: "convert", value: 2, from: "m", to: "cm" } });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.dimension, "length");
+  assert.strictEqual(payload.result, 200);
+}
+
+async function testUnitRouteMassConversion() {
+  const result = await routeTask({ tool: "unit", input: { operation: "convert", value: 1, from: "kg", to: "g" } });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.dimension, "mass");
+  assert.strictEqual(payload.result, 1000);
+}
+
+async function testUnitRouteTemperatureConversion() {
+  const result = await routeTask({
+    tool: "unit",
+    input: { operation: "convert", value: 0, from: "celsius", to: "fahrenheit" }
+  });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.dimension, "temperature");
+  assert.strictEqual(payload.result, 32);
+}
+
+async function testUnitRouteAngleConversion() {
+  const result = await routeTask({
+    tool: "unit",
+    input: { operation: "convert", value: Math.PI, from: "radians", to: "degrees" }
+  });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.dimension, "angle");
+  assert(Math.abs(payload.result - 180) < 1e-12);
+}
+
+async function testUnitRouteIncompatibleConversion() {
+  const result = await routeTask({ tool: "unit", input: { operation: "convert", value: 1, from: "m", to: "s" } });
+  assert.strictEqual(result.status, "error");
+  assert(result.error.includes("Incompatible unit dimensions"));
+}
+
+async function testUnitRouteUnknownUnit() {
+  const result = await routeTask({ tool: "unit", input: { operation: "convert", value: 1, from: "parsec", to: "m" } });
+  assert.strictEqual(result.status, "error");
+  assert(result.error.includes("Unknown from unit"));
 }
 
 function testFallbackRouting() {
@@ -375,6 +433,12 @@ async function run() {
   await testMathRouteConstantPi();
   await testMathRouteDivideByZero();
   await testMathRouteUnknownOperation();
+  await testUnitRouteLengthConversion();
+  await testUnitRouteMassConversion();
+  await testUnitRouteTemperatureConversion();
+  await testUnitRouteAngleConversion();
+  await testUnitRouteIncompatibleConversion();
+  await testUnitRouteUnknownUnit();
   testFallbackRouting();
   testPythonSandboxSafeExecution();
   testSandboxAllowsInternalOpen();

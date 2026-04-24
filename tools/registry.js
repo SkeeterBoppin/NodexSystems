@@ -3,6 +3,7 @@ const videoTool = require("./videoTool");
 const audioTool = require("./audioTool");
 const ffmpegTool = require("./ffmpegTool");
 const mathTool = require("./mathTool");
+const unitTool = require("./unitTool");
 const pythonTool = require("./pythonTool");
 const readFileTool = require("./readFileTool");
 const writeFileTool = require("./writeFileTool");
@@ -82,6 +83,18 @@ function createRegistry() {
         value: "number",
         constant: "pi|e",
         decimals: "number"
+      },
+      outputs: { output: "string", data: "object" }
+    }),
+    createToolDefinition({
+      key: "unit",
+      aliases: ["units", "convert_unit"],
+      tool: unitTool,
+      inputs: {
+        operation: "convert",
+        value: "number",
+        from: "string",
+        to: "string"
       },
       outputs: { output: "string", data: "object" }
     }),

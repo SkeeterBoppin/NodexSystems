@@ -45,7 +45,7 @@ function assertApproximatelyArrayEqual(actual, expected, tolerance = 1e-12) {
 
 async function testRegistry() {
   const registry = createRegistry();
-  ["image", "video", "audio", "code", "ffmpeg", "math", "geometry", "unit", "trig", "logic", "vector", "matrix"].forEach(name => {
+  ["image", "video", "audio", "code", "ffmpeg", "math", "geometry", "unit", "trig", "logic", "vector", "matrix", "formula"].forEach(name => {
     assert(registry.has(name), `missing tool: ${name}`);
   });
 }
@@ -841,6 +841,190 @@ async function testMatrixRouteCapOverflow() {
   assert(result.error.includes("32"));
 }
 
+async function testFormulaRouteListFormulas() {
+  const result = await routeTask({ tool: "formula", input: { operation: "list_formulas" } });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.operation, "list_formulas");
+  assert.strictEqual(payload.count, 5);
+  assert(payload.formulas.some(formula => formula.id === "kinetic_energy"));
+}
+
+async function testFormulaRouteGetFormula() {
+  const result = await routeTask({
+    tool: "formula",
+    input: { operation: "get_formula", formulaId: "kinetic_energy" }
+  });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.operation, "get_formula");
+  assert.strictEqual(payload.formulaId, "kinetic_energy");
+  assert.strictEqual(payload.formula.id, "kinetic_energy");
+}
+
+async function testFormulaRouteEvaluateKineticEnergy() {
+  const result = await routeTask({
+    tool: "formula",
+    input: {
+      operation: "evaluate_formula",
+      formulaId: "kinetic_energy",
+      variables: { mass: 2, velocity: 3 }
+    }
+  });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.result, 9);
+}
+
+async function testFormulaRouteEvaluateDensity() {
+  const result = await routeTask({
+    tool: "formula",
+    input: {
+      operation: "evaluate_formula",
+      formulaId: "density",
+      variables: { mass: 10, volume: 2 }
+    }
+  });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.result, 5);
+}
+
+async function testFormulaRouteEvaluateSpeed() {
+  const result = await routeTask({
+    tool: "formula",
+    input: {
+      operation: "evaluate_formula",
+      formulaId: "speed",
+      variables: { distance: 100, time: 4 }
+    }
+  });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.result, 25);
+}
+
+async function testFormulaRouteEvaluateOhmsLawVoltage() {
+  const result = await routeTask({
+    tool: "formula",
+    input: {
+      operation: "evaluate_formula",
+      formulaId: "ohms_law_voltage",
+      variables: { current: 2, resistance: 5 }
+    }
+  });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.result, 10);
+}
+
+async function testFormulaRouteEvaluateMomentum() {
+  const result = await routeTask({
+    tool: "formula",
+    input: {
+      operation: "evaluate_formula",
+      formulaId: "momentum",
+      variables: { mass: 3, velocity: 4 }
+    }
+  });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.result, 12);
+}
+
+async function testFormulaRouteUnknownFormulaId() {
+  const result = await routeTask({
+    tool: "formula",
+    input: { operation: "get_formula", formulaId: "missing_formula" }
+  });
+  assert.strictEqual(result.status, "error");
+  assert(result.error.includes("Unknown formulaId"));
+}
+
+async function testFormulaRouteMissingRequiredVariable() {
+  const result = await routeTask({
+    tool: "formula",
+    input: {
+      operation: "evaluate_formula",
+      formulaId: "kinetic_energy",
+      variables: { mass: 2 }
+    }
+  });
+  assert.strictEqual(result.status, "error");
+  assert(result.error.includes("Missing required variable"));
+}
+
+async function testFormulaRouteUnknownProvidedVariable() {
+  const result = await routeTask({
+    tool: "formula",
+    input: {
+      operation: "evaluate_formula",
+      formulaId: "kinetic_energy",
+      variables: { mass: 2, velocity: 3, force: 5 }
+    }
+  });
+  assert.strictEqual(result.status, "error");
+  assert(result.error.includes("Unknown variable"));
+}
+
+async function testFormulaRouteNonFiniteVariable() {
+  const result = await routeTask({
+    tool: "formula",
+    input: {
+      operation: "evaluate_formula",
+      formulaId: "kinetic_energy",
+      variables: { mass: Infinity, velocity: 3 }
+    }
+  });
+  assert.strictEqual(result.status, "error");
+  assert(result.error.includes("finite number"));
+}
+
+async function testFormulaRouteDivideByZero() {
+  const result = await routeTask({
+    tool: "formula",
+    input: {
+      operation: "evaluate_formula",
+      formulaId: "density",
+      variables: { mass: 10, volume: 0 }
+    }
+  });
+  assert.strictEqual(result.status, "error");
+  assert(result.error.includes("divide by zero"));
+}
+
+async function testFormulaRouteUnknownOperation() {
+  const result = await routeTask({
+    tool: "formula",
+    input: { operation: "derive_formula" }
+  });
+  assert.strictEqual(result.status, "error");
+  assert(result.error.includes("Unknown formula operation"));
+}
+
+async function testFormulaRouteMalformedInput() {
+  const result = await routeTask({
+    tool: "formula",
+    input: []
+  });
+  assert.strictEqual(result.status, "error");
+  assert(result.error.includes("JSON object"));
+}
+
 function testFallbackRouting() {
   assert.strictEqual(fallbackDecision("generate an image of a workstation").tool, "image");
   assert.strictEqual(fallbackDecision("make a video animation").tool, "video");
@@ -1142,6 +1326,20 @@ async function run() {
   await testMatrixRouteNonFiniteElement();
   await testMatrixRouteDeterminantWrongSize();
   await testMatrixRouteCapOverflow();
+  await testFormulaRouteListFormulas();
+  await testFormulaRouteGetFormula();
+  await testFormulaRouteEvaluateKineticEnergy();
+  await testFormulaRouteEvaluateDensity();
+  await testFormulaRouteEvaluateSpeed();
+  await testFormulaRouteEvaluateOhmsLawVoltage();
+  await testFormulaRouteEvaluateMomentum();
+  await testFormulaRouteUnknownFormulaId();
+  await testFormulaRouteMissingRequiredVariable();
+  await testFormulaRouteUnknownProvidedVariable();
+  await testFormulaRouteNonFiniteVariable();
+  await testFormulaRouteDivideByZero();
+  await testFormulaRouteUnknownOperation();
+  await testFormulaRouteMalformedInput();
   testFallbackRouting();
   testPythonSandboxSafeExecution();
   testSandboxAllowsInternalOpen();

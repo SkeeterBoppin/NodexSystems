@@ -9,6 +9,7 @@ const trigTool = require("./trigTool");
 const logicTool = require("./logicTool");
 const vectorTool = require("./vectorTool");
 const matrixTool = require("./matrixTool");
+const formulaTool = require("./formulaTool");
 const pythonTool = require("./pythonTool");
 const readFileTool = require("./readFileTool");
 const writeFileTool = require("./writeFileTool");
@@ -170,6 +171,17 @@ function createRegistry() {
         vector: "number[]",
         scalar: "number",
         size: "integer"
+      },
+      outputs: { output: "string", data: "object" }
+    }),
+    createToolDefinition({
+      key: "formula",
+      aliases: ["formulas", "formula_math", "formula_registry"],
+      tool: formulaTool,
+      inputs: {
+        operation: "list_formulas|get_formula|evaluate_formula",
+        formulaId: "string",
+        variables: "object"
       },
       outputs: { output: "string", data: "object" }
     }),

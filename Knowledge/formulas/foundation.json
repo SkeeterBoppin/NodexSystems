@@ -1,0 +1,177 @@
+{
+  "version": 1,
+  "formulas": [
+    {
+      "id": "kinetic_energy",
+      "domain": "physics.mechanics",
+      "name": "Kinetic Energy",
+      "description": "KE = 0.5 * mass * velocity^2",
+      "variables": {
+        "mass": {
+          "type": "number",
+          "required": true,
+          "quantity": "mass"
+        },
+        "velocity": {
+          "type": "number",
+          "required": true,
+          "quantity": "speed"
+        }
+      },
+      "output": {
+        "type": "number",
+        "quantity": "energy"
+      },
+      "expression": {
+        "op": "multiply",
+        "args": [
+          0.5,
+          {
+            "var": "mass"
+          },
+          {
+            "op": "power",
+            "args": [
+              {
+                "var": "velocity"
+              },
+              2
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "density",
+      "domain": "physics.general",
+      "name": "Density",
+      "description": "Density = mass / volume",
+      "variables": {
+        "mass": {
+          "type": "number",
+          "required": true,
+          "quantity": "mass"
+        },
+        "volume": {
+          "type": "number",
+          "required": true,
+          "quantity": "volume"
+        }
+      },
+      "output": {
+        "type": "number",
+        "quantity": "density"
+      },
+      "expression": {
+        "op": "divide",
+        "args": [
+          {
+            "var": "mass"
+          },
+          {
+            "var": "volume"
+          }
+        ]
+      }
+    },
+    {
+      "id": "speed",
+      "domain": "physics.mechanics",
+      "name": "Speed",
+      "description": "Speed = distance / time",
+      "variables": {
+        "distance": {
+          "type": "number",
+          "required": true,
+          "quantity": "distance"
+        },
+        "time": {
+          "type": "number",
+          "required": true,
+          "quantity": "time"
+        }
+      },
+      "output": {
+        "type": "number",
+        "quantity": "speed"
+      },
+      "expression": {
+        "op": "divide",
+        "args": [
+          {
+            "var": "distance"
+          },
+          {
+            "var": "time"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ohms_law_voltage",
+      "domain": "physics.electromagnetism",
+      "name": "Ohm's Law Voltage",
+      "description": "Voltage = current * resistance",
+      "variables": {
+        "current": {
+          "type": "number",
+          "required": true,
+          "quantity": "current"
+        },
+        "resistance": {
+          "type": "number",
+          "required": true,
+          "quantity": "resistance"
+        }
+      },
+      "output": {
+        "type": "number",
+        "quantity": "voltage"
+      },
+      "expression": {
+        "op": "multiply",
+        "args": [
+          {
+            "var": "current"
+          },
+          {
+            "var": "resistance"
+          }
+        ]
+      }
+    },
+    {
+      "id": "momentum",
+      "domain": "physics.mechanics",
+      "name": "Momentum",
+      "description": "Momentum = mass * velocity",
+      "variables": {
+        "mass": {
+          "type": "number",
+          "required": true,
+          "quantity": "mass"
+        },
+        "velocity": {
+          "type": "number",
+          "required": true,
+          "quantity": "speed"
+        }
+      },
+      "output": {
+        "type": "number",
+        "quantity": "momentum"
+      },
+      "expression": {
+        "op": "multiply",
+        "args": [
+          {
+            "var": "mass"
+          },
+          {
+            "var": "velocity"
+          }
+        ]
+      }
+    }
+  ]
+}

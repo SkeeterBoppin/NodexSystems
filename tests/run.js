@@ -29,6 +29,15 @@ const {
 } = require("../evolution/learning");
 const { scoreExecutionMetrics } = require("../evolution/scorer");
 const { selectBestCandidate } = require("../evolution/evolver");
+const {
+  createTaskGraph,
+  validateTaskGraph,
+  getCurrentStep,
+  getNextExecutableStep,
+  markStepStarted,
+  markStepPassed,
+  markStepFailed
+} = require("../core/taskGraph");
 
 function assertApproximatelyEqual(actual, expected, tolerance = 1e-12) {
   assert(Math.abs(actual - expected) < tolerance, `expected ${actual} to be within ${tolerance} of ${expected}`);
@@ -1144,6 +1153,205 @@ function testDomainOntologyManifest() {
   assertDomainUsesRule("neuroscience", "scientific_empirical");
 }
 
+function buildTaskGraphInput() {
+  return {
+    version: 1,
+    graphId: "taskgraph_example",
+    mode: "apply",
+    allowedFiles: ["./core\\taskGraph.js", "./tests\\run.js"],
+    forbiddenFiles: ["tools/", "Knowledge/", "evolution/", "./CONTEXT.md"],
+    steps: [
+      {
+        id: "inspect_boundary",
+        type: "inspect",
+        title: "Inspect existing seam",
+        files: [],
+        status: "pending",
+        validation: {
+          required: false,
+          gates: []
+        },
+        evidence: []
+      },
+      {
+        id: "implement_module",
+        type: "edit",
+        title: "Add task graph runtime module",
+        files: ["./core\\taskGraph.js"],
+        status: "pending",
+        validation: {
+          required: true,
+          gates: ["syntax"]
+        },
+        evidence: []
+      },
+      {
+        id: "validate_harness",
+        type: "validate",
+        title: "Validate harness",
+        files: ["./tests\\run.js"],
+        status: "pending",
+        validation: {
+          required: true,
+          gates: ["test"]
+        },
+        evidence: []
+      }
+    ]
+  };
+}
+
+function buildTaskGraph(mutate) {
+  const input = buildTaskGraphInput();
+
+  if (typeof mutate === "function") {
+    mutate(input);
+  }
+
+  return createTaskGraph(input);
+}
+
+function createEvidence(kind, result = "pass", overrides = {}) {
+  return {
+    kind,
+    label: `${kind} evidence`,
+    subject: "core/taskGraph.js",
+    result,
+    summary: `${kind} ${result}`,
+    data: { exitCode: result === "pass" ? 0 : 1 },
+    ...overrides
+  };
+}
+
+function testTaskGraphRuntime() {
+  {
+    const input = buildTaskGraphInput();
+    const graph = createTaskGraph(input);
+
+    assert.strictEqual(validateTaskGraph(graph), true);
+    assert.deepStrictEqual(graph.allowedFiles, ["core/taskGraph.js", "tests/run.js"]);
+    assert.deepStrictEqual(graph.forbiddenFiles, ["tools/", "Knowledge/", "evolution/", "CONTEXT.md"]);
+    assert.deepStrictEqual(graph.steps[1].files, ["core/taskGraph.js"]);
+    assert.deepStrictEqual(input.allowedFiles, ["./core\\taskGraph.js", "./tests\\run.js"]);
+  }
+
+  {
+    const input = buildTaskGraphInput();
+    input.steps = [];
+    assert.throws(() => createTaskGraph(input), /steps/i);
+  }
+
+  {
+    const input = buildTaskGraphInput();
+    input.steps[1].id = "inspect_boundary";
+    assert.throws(() => createTaskGraph(input), /unique/i);
+  }
+
+  {
+    const input = buildTaskGraphInput();
+    input.forbiddenFiles = ["core/"];
+    assert.throws(() => createTaskGraph(input), /overlaps|forbidden/i);
+  }
+
+  {
+    const input = buildTaskGraphInput();
+    input.steps[1].files = ["tools/mathTool.js"];
+    assert.throws(() => createTaskGraph(input), /allowedFiles|forbidden/i);
+  }
+
+  {
+    const graph = buildTaskGraph(input => {
+      input.steps[0].status = "passed";
+    });
+    const nextStep = getNextExecutableStep(graph);
+
+    assert(nextStep, "expected a next executable step");
+    assert.strictEqual(nextStep.id, "implement_module");
+  }
+
+  {
+    const graph = buildTaskGraph();
+    assert.throws(() => markStepStarted(graph, "implement_module"), /next executable|step implement_module/i);
+  }
+
+  {
+    const graph = buildTaskGraph(input => {
+      input.steps[0].status = "passed";
+      input.steps[1].status = "in_progress";
+    });
+    assert.throws(() => markStepPassed(graph, "implement_module", []), /syntax|evidence/i);
+  }
+
+  {
+    const graph = buildTaskGraph(input => {
+      input.steps[0].status = "passed";
+      input.steps[1].status = "in_progress";
+    });
+    const passedGraph = markStepPassed(graph, "implement_module", [
+      createEvidence("syntax", "pass", {
+        label: "node -c core/taskGraph.js",
+        subject: "core/taskGraph.js",
+        summary: "syntax check passed"
+      })
+    ]);
+
+    assert.strictEqual(passedGraph.steps[1].status, "passed");
+    assert.strictEqual(passedGraph.steps[1].evidence.length, 1);
+    assert.strictEqual(getNextExecutableStep(passedGraph).id, "validate_harness");
+  }
+
+  {
+    const graph = buildTaskGraph(input => {
+      input.steps[0].status = "passed";
+      input.steps[1].status = "in_progress";
+    });
+    const currentStep = getCurrentStep(graph);
+
+    assert(currentStep, "expected a current step");
+    assert.strictEqual(currentStep.id, "implement_module");
+  }
+
+  {
+    const input = buildTaskGraphInput();
+    input.steps[0].status = "passed";
+    input.steps[1].status = "in_progress";
+    input.steps[2].status = "in_progress";
+    assert.throws(() => validateTaskGraph(input), /in_progress/i);
+  }
+
+  {
+    const graph = buildTaskGraph(input => {
+      input.steps[0].status = "passed";
+      input.steps[1].status = "in_progress";
+    });
+    const failedGraph = markStepFailed(graph, "implement_module", [
+      createEvidence("syntax", "fail", {
+        label: "node -c core/taskGraph.js",
+        subject: "core/taskGraph.js",
+        summary: "syntax check failed",
+        data: { exitCode: 1 }
+      })
+    ]);
+
+    assert.strictEqual(failedGraph.steps[1].status, "failed");
+    assert.strictEqual(failedGraph.steps[1].evidence.length, 1);
+    assert.strictEqual(failedGraph.steps[1].evidence[0].result, "fail");
+    assert.strictEqual(getCurrentStep(failedGraph), null);
+  }
+
+  {
+    const originalGraph = buildTaskGraph();
+    const startedGraph = markStepStarted(originalGraph, "inspect_boundary");
+    const passedGraph = markStepPassed(startedGraph, "inspect_boundary", []);
+
+    assert.strictEqual(originalGraph.steps[0].status, "pending");
+    assert.strictEqual(startedGraph.steps[0].status, "in_progress");
+    assert.strictEqual(passedGraph.steps[0].status, "passed");
+    assert.strictEqual(originalGraph.steps[0].evidence.length, 0);
+    assert.strictEqual(startedGraph.steps[0].evidence.length, 0);
+  }
+}
+
 function testFallbackRouting() {
   assert.strictEqual(fallbackDecision("generate an image of a workstation").tool, "image");
   assert.strictEqual(fallbackDecision("make a video animation").tool, "video");
@@ -1460,6 +1668,7 @@ async function run() {
   await testFormulaRouteUnknownOperation();
   await testFormulaRouteMalformedInput();
   testDomainOntologyManifest();
+  testTaskGraphRuntime();
   testFallbackRouting();
   testPythonSandboxSafeExecution();
   testSandboxAllowsInternalOpen();

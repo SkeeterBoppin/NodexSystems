@@ -36,7 +36,7 @@ function assertApproximatelyEqual(actual, expected, tolerance = 1e-12) {
 
 async function testRegistry() {
   const registry = createRegistry();
-  ["image", "video", "audio", "code", "ffmpeg", "math", "geometry", "unit", "trig"].forEach(name => {
+  ["image", "video", "audio", "code", "ffmpeg", "math", "geometry", "unit", "trig", "logic"].forEach(name => {
     assert(registry.has(name), `missing tool: ${name}`);
   });
 }
@@ -362,6 +362,96 @@ async function testTrigRouteUnknownOperation() {
   assert(result.error.includes("Unknown trig operation"));
 }
 
+async function testLogicRouteNot() {
+  const result = await routeTask({ tool: "logic", input: { operation: "not", operands: [true] } });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.operation, "not");
+  assert.deepStrictEqual(payload.operands, [true]);
+  assert.strictEqual(payload.result, false);
+}
+
+async function testLogicRouteAnd() {
+  const result = await routeTask({ tool: "logic", input: { operation: "and", operands: [true, true, true] } });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.operation, "and");
+  assert.deepStrictEqual(payload.operands, [true, true, true]);
+  assert.strictEqual(payload.result, true);
+}
+
+async function testLogicRouteOr() {
+  const result = await routeTask({ tool: "logic", input: { operation: "or", operands: [false, false, true] } });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.operation, "or");
+  assert.deepStrictEqual(payload.operands, [false, false, true]);
+  assert.strictEqual(payload.result, true);
+}
+
+async function testLogicRouteXor() {
+  const result = await routeTask({ tool: "logic", input: { operation: "xor", operands: [true, false] } });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.operation, "xor");
+  assert.deepStrictEqual(payload.operands, [true, false]);
+  assert.strictEqual(payload.result, true);
+}
+
+async function testLogicRouteImplies() {
+  const result = await routeTask({ tool: "logic", input: { operation: "implies", operands: [true, false] } });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.operation, "implies");
+  assert.deepStrictEqual(payload.operands, [true, false]);
+  assert.strictEqual(payload.result, false);
+}
+
+async function testLogicRouteIff() {
+  const result = await routeTask({ tool: "logic", input: { operation: "iff", operands: [true, true] } });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.operation, "iff");
+  assert.deepStrictEqual(payload.operands, [true, true]);
+  assert.strictEqual(payload.result, true);
+}
+
+async function testLogicRouteUnknownOperation() {
+  const result = await routeTask({ tool: "logic", input: { operation: "nand", operands: [true, false] } });
+  assert.strictEqual(result.status, "error");
+  assert(result.error.includes("Unknown logic operation"));
+}
+
+async function testLogicRouteMissingOperands() {
+  const result = await routeTask({ tool: "logic", input: { operation: "and" } });
+  assert.strictEqual(result.status, "error");
+  assert(result.error.includes("operands"));
+}
+
+async function testLogicRouteWrongArity() {
+  const result = await routeTask({ tool: "logic", input: { operation: "xor", operands: [true, false, true] } });
+  assert.strictEqual(result.status, "error");
+  assert(result.error.includes("exactly 2"));
+}
+
+async function testLogicRouteNonBooleanOperand() {
+  const result = await routeTask({ tool: "logic", input: { operation: "or", operands: [false, 1] } });
+  assert.strictEqual(result.status, "error");
+  assert(result.error.includes("boolean"));
+}
+
 function testFallbackRouting() {
   assert.strictEqual(fallbackDecision("generate an image of a workstation").tool, "image");
   assert.strictEqual(fallbackDecision("make a video animation").tool, "video");
@@ -625,6 +715,16 @@ async function run() {
   await testTrigRouteTanSingularAngle();
   await testTrigRouteAsinOutOfRange();
   await testTrigRouteUnknownOperation();
+  await testLogicRouteNot();
+  await testLogicRouteAnd();
+  await testLogicRouteOr();
+  await testLogicRouteXor();
+  await testLogicRouteImplies();
+  await testLogicRouteIff();
+  await testLogicRouteUnknownOperation();
+  await testLogicRouteMissingOperands();
+  await testLogicRouteWrongArity();
+  await testLogicRouteNonBooleanOperand();
   testFallbackRouting();
   testPythonSandboxSafeExecution();
   testSandboxAllowsInternalOpen();

@@ -6,6 +6,7 @@ const mathTool = require("./mathTool");
 const geometryTool = require("./geometryTool");
 const unitTool = require("./unitTool");
 const trigTool = require("./trigTool");
+const logicTool = require("./logicTool");
 const pythonTool = require("./pythonTool");
 const readFileTool = require("./readFileTool");
 const writeFileTool = require("./writeFileTool");
@@ -129,6 +130,16 @@ function createRegistry() {
         angleUnit: "rad|deg",
         value: "number",
         resultUnit: "rad|deg"
+      },
+      outputs: { output: "string", data: "object" }
+    }),
+    createToolDefinition({
+      key: "logic",
+      aliases: ["boolean_logic", "logic_validation"],
+      tool: logicTool,
+      inputs: {
+        operation: "not|and|or|xor|implies|iff",
+        operands: "boolean[]"
       },
       outputs: { output: "string", data: "object" }
     }),

@@ -38,6 +38,10 @@ const {
   markStepPassed,
   markStepFailed
 } = require("../core/taskGraph");
+const {
+  createMemoryCapsule,
+  validateMemoryCapsule
+} = require("../core/memoryCapsule");
 
 function assertApproximatelyEqual(actual, expected, tolerance = 1e-12) {
   assert(Math.abs(actual - expected) < tolerance, `expected ${actual} to be within ${tolerance} of ${expected}`);
@@ -1352,6 +1356,151 @@ function testTaskGraphRuntime() {
   }
 }
 
+function buildMemoryCapsuleInput() {
+  return {
+    version: 1,
+    capsuleId: "task_graph_v1",
+    phase: "stabilization",
+    seam: {
+      id: "task_graph_v1",
+      title: "Deterministic task graph",
+      status: "validated"
+    },
+    commit: {
+      head: "d01ea48",
+      message: "Add deterministic task graph"
+    },
+    files: ["./core\\taskGraph.js", "./tests\\run.js"],
+    evidence: [
+      {
+        kind: "test",
+        subject: "./tests\\run.js",
+        result: "pass",
+        summary: "All Nodex tests passed"
+      }
+    ],
+    summary: {
+      problem: "Need deterministic task execution control",
+      change: "Added TaskGraph validator/runtime",
+      outcome: "Validated and committed",
+      limits: [
+        "no prompt-to-graph parser",
+        "no persistence",
+        "no autonomous execution"
+      ]
+    }
+  };
+}
+
+function testMemoryCapsuleRuntime() {
+  {
+    const input = buildMemoryCapsuleInput();
+    const capsule = createMemoryCapsule(input);
+
+    assert.strictEqual(validateMemoryCapsule(capsule), true);
+    assert.deepStrictEqual(capsule.files, ["core/taskGraph.js", "tests/run.js"]);
+    assert.strictEqual(capsule.evidence[0].subject, "tests/run.js");
+    assert.deepStrictEqual(input.files, ["./core\\taskGraph.js", "./tests\\run.js"]);
+    assert.strictEqual(input.evidence[0].subject, "./tests\\run.js");
+  }
+
+  {
+    const input = buildMemoryCapsuleInput();
+    const snapshot = JSON.parse(JSON.stringify(input));
+    const capsule = createMemoryCapsule(input);
+
+    assert.deepStrictEqual(input, snapshot);
+    assert.notStrictEqual(capsule, input);
+    assert.notStrictEqual(capsule.files, input.files);
+    assert.notStrictEqual(capsule.evidence, input.evidence);
+    assert.notStrictEqual(capsule.evidence[0], input.evidence[0]);
+  }
+
+  {
+    const input = buildMemoryCapsuleInput();
+    input.capsuleId = "task-graph-v1";
+    assert.throws(() => createMemoryCapsule(input), /capsuleId/i);
+  }
+
+  {
+    const input = buildMemoryCapsuleInput();
+    input.phase = "one_click";
+    assert.throws(() => createMemoryCapsule(input), /phase/i);
+  }
+
+  {
+    const input = buildMemoryCapsuleInput();
+    input.seam.status = "running";
+    assert.throws(() => createMemoryCapsule(input), /seam\.status/i);
+  }
+
+  {
+    const input = buildMemoryCapsuleInput();
+    input.commit.head = "invalid";
+    assert.throws(() => createMemoryCapsule(input), /commit\.head/i);
+  }
+
+  {
+    const input = buildMemoryCapsuleInput();
+    input.files = [];
+    assert.throws(() => createMemoryCapsule(input), /files/i);
+  }
+
+  {
+    const input = buildMemoryCapsuleInput();
+    input.files = ["/core/taskGraph.js"];
+    assert.throws(() => createMemoryCapsule(input), /repo-relative|files/i);
+  }
+
+  {
+    const input = buildMemoryCapsuleInput();
+    input.files = ["../core/taskGraph.js"];
+    assert.throws(() => createMemoryCapsule(input), /\.\.|files/i);
+  }
+
+  {
+    const input = buildMemoryCapsuleInput();
+    input.files = ["./core\\taskGraph.js", "core/taskGraph.js"];
+    assert.throws(() => createMemoryCapsule(input), /duplicate|files/i);
+  }
+
+  {
+    const input = buildMemoryCapsuleInput();
+    input.evidence = [];
+    assert.throws(() => createMemoryCapsule(input), /evidence/i);
+  }
+
+  {
+    const input = buildMemoryCapsuleInput();
+    input.evidence[0].kind = "deploy";
+    assert.throws(() => createMemoryCapsule(input), /kind/i);
+  }
+
+  {
+    const input = buildMemoryCapsuleInput();
+    input.evidence[0].result = "warn";
+    assert.throws(() => createMemoryCapsule(input), /result/i);
+  }
+
+  {
+    const input = buildMemoryCapsuleInput();
+    input.evidence[0].subject = "../tests/run.js";
+    assert.throws(() => createMemoryCapsule(input), /subject|\.\./i);
+  }
+
+  {
+    const input = buildMemoryCapsuleInput();
+    delete input.summary.outcome;
+    assert.throws(() => createMemoryCapsule(input), /summary\.outcome/i);
+  }
+
+  {
+    const input = buildMemoryCapsuleInput();
+    input.summary.limits = ["no persistence", 1];
+    assert.throws(() => createMemoryCapsule(input), /summary\.limits/i);
+  }
+}
+
 function testFallbackRouting() {
   assert.strictEqual(fallbackDecision("generate an image of a workstation").tool, "image");
   assert.strictEqual(fallbackDecision("make a video animation").tool, "video");
@@ -1669,6 +1818,7 @@ async function run() {
   await testFormulaRouteMalformedInput();
   testDomainOntologyManifest();
   testTaskGraphRuntime();
+  testMemoryCapsuleRuntime();
   testFallbackRouting();
   testPythonSandboxSafeExecution();
   testSandboxAllowsInternalOpen();

@@ -34,9 +34,18 @@ function assertApproximatelyEqual(actual, expected, tolerance = 1e-12) {
   assert(Math.abs(actual - expected) < tolerance, `expected ${actual} to be within ${tolerance} of ${expected}`);
 }
 
+function assertApproximatelyArrayEqual(actual, expected, tolerance = 1e-12) {
+  assert(Array.isArray(actual), "expected an array result");
+  assert.strictEqual(actual.length, expected.length, "array lengths must match");
+
+  actual.forEach((value, index) => {
+    assertApproximatelyEqual(value, expected[index], tolerance);
+  });
+}
+
 async function testRegistry() {
   const registry = createRegistry();
-  ["image", "video", "audio", "code", "ffmpeg", "math", "geometry", "unit", "trig", "logic"].forEach(name => {
+  ["image", "video", "audio", "code", "ffmpeg", "math", "geometry", "unit", "trig", "logic", "vector"].forEach(name => {
     assert(registry.has(name), `missing tool: ${name}`);
   });
 }
@@ -452,6 +461,138 @@ async function testLogicRouteNonBooleanOperand() {
   assert(result.error.includes("boolean"));
 }
 
+async function testVectorRouteAdd() {
+  const result = await routeTask({ tool: "vector", input: { operation: "vector_add", left: [1, 2], right: [3, 4] } });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.operation, "vector_add");
+  assert.strictEqual(payload.dimension, 2);
+  assert.deepStrictEqual(payload.result, [4, 6]);
+}
+
+async function testVectorRouteSubtract() {
+  const result = await routeTask({
+    tool: "vector",
+    input: { operation: "vector_subtract", left: [5, 7], right: [2, 3] }
+  });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.operation, "vector_subtract");
+  assert.strictEqual(payload.dimension, 2);
+  assert.deepStrictEqual(payload.result, [3, 4]);
+}
+
+async function testVectorRouteScalarMultiply() {
+  const result = await routeTask({
+    tool: "vector",
+    input: { operation: "scalar_multiply", scalar: 3, vector: [1, -2, 0] }
+  });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.operation, "scalar_multiply");
+  assert.strictEqual(payload.dimension, 3);
+  assert.deepStrictEqual(payload.result, [3, -6, 0]);
+}
+
+async function testVectorRouteDotProduct() {
+  const result = await routeTask({
+    tool: "vector",
+    input: { operation: "dot_product", left: [1, 2, 3], right: [4, 5, 6] }
+  });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.operation, "dot_product");
+  assert.strictEqual(payload.dimension, 3);
+  assert.strictEqual(payload.result, 32);
+}
+
+async function testVectorRouteMagnitude() {
+  const result = await routeTask({ tool: "vector", input: { operation: "magnitude", vector: [3, 4] } });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.operation, "magnitude");
+  assert.strictEqual(payload.dimension, 2);
+  assert.strictEqual(payload.result, 5);
+}
+
+async function testVectorRouteNormalize() {
+  const result = await routeTask({ tool: "vector", input: { operation: "normalize", vector: [3, 4] } });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.operation, "normalize");
+  assert.strictEqual(payload.dimension, 2);
+  assertApproximatelyArrayEqual(payload.result, [0.6, 0.8]);
+}
+
+async function testVectorRouteCrossProduct3d() {
+  const result = await routeTask({
+    tool: "vector",
+    input: { operation: "cross_product_3d", left: [1, 0, 0], right: [0, 1, 0] }
+  });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.operation, "cross_product_3d");
+  assert.strictEqual(payload.dimension, 3);
+  assert.deepStrictEqual(payload.result, [0, 0, 1]);
+}
+
+async function testVectorRouteMismatchedLengths() {
+  const result = await routeTask({
+    tool: "vector",
+    input: { operation: "vector_add", left: [1, 2], right: [3] }
+  });
+  assert.strictEqual(result.status, "error");
+  assert(result.error.includes("same length"));
+}
+
+async function testVectorRouteNormalizeZeroVector() {
+  const result = await routeTask({ tool: "vector", input: { operation: "normalize", vector: [0, 0] } });
+  assert.strictEqual(result.status, "error");
+  assert(result.error.includes("non-zero vector"));
+}
+
+async function testVectorRouteNonFiniteElement() {
+  const result = await routeTask({
+    tool: "vector",
+    input: { operation: "dot_product", left: [1, Infinity], right: [2, 3] }
+  });
+  assert.strictEqual(result.status, "error");
+  assert(result.error.includes("finite number"));
+}
+
+async function testVectorRouteUnknownOperation() {
+  const result = await routeTask({ tool: "vector", input: { operation: "matrix_inverse", vector: [1, 2] } });
+  assert.strictEqual(result.status, "error");
+  assert(result.error.includes("Unknown vector operation"));
+}
+
+async function testVectorRouteCapOverflow() {
+  const result = await routeTask({
+    tool: "vector",
+    input: {
+      operation: "vector_add",
+      left: new Array(129).fill(1),
+      right: new Array(129).fill(2)
+    }
+  });
+  assert.strictEqual(result.status, "error");
+  assert(result.error.includes("128"));
+}
+
 function testFallbackRouting() {
   assert.strictEqual(fallbackDecision("generate an image of a workstation").tool, "image");
   assert.strictEqual(fallbackDecision("make a video animation").tool, "video");
@@ -725,6 +866,18 @@ async function run() {
   await testLogicRouteMissingOperands();
   await testLogicRouteWrongArity();
   await testLogicRouteNonBooleanOperand();
+  await testVectorRouteAdd();
+  await testVectorRouteSubtract();
+  await testVectorRouteScalarMultiply();
+  await testVectorRouteDotProduct();
+  await testVectorRouteMagnitude();
+  await testVectorRouteNormalize();
+  await testVectorRouteCrossProduct3d();
+  await testVectorRouteMismatchedLengths();
+  await testVectorRouteNormalizeZeroVector();
+  await testVectorRouteNonFiniteElement();
+  await testVectorRouteUnknownOperation();
+  await testVectorRouteCapOverflow();
   testFallbackRouting();
   testPythonSandboxSafeExecution();
   testSandboxAllowsInternalOpen();

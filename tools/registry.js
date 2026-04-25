@@ -7,6 +7,7 @@ const geometryTool = require("./geometryTool");
 const unitTool = require("./unitTool");
 const trigTool = require("./trigTool");
 const logicTool = require("./logicTool");
+const vectorTool = require("./vectorTool");
 const pythonTool = require("./pythonTool");
 const readFileTool = require("./readFileTool");
 const writeFileTool = require("./writeFileTool");
@@ -140,6 +141,19 @@ function createRegistry() {
       inputs: {
         operation: "not|and|or|xor|implies|iff",
         operands: "boolean[]"
+      },
+      outputs: { output: "string", data: "object" }
+    }),
+    createToolDefinition({
+      key: "vector",
+      aliases: ["vectors", "vector_math"],
+      tool: vectorTool,
+      inputs: {
+        operation: "vector_add|vector_subtract|scalar_multiply|dot_product|magnitude|normalize|cross_product_3d",
+        left: "number[]",
+        right: "number[]",
+        vector: "number[]",
+        scalar: "number"
       },
       outputs: { output: "string", data: "object" }
     }),

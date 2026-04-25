@@ -49,6 +49,9 @@ const {
 const {
   parseTranscriptEvidenceCandidates
 } = require("../core/transcriptParser");
+const {
+  adaptTranscriptEvidenceCandidates
+} = require("../core/transcriptEvidenceAdapter");
 
 function assertApproximatelyEqual(actual, expected, tolerance = 1e-12) {
   assert(Math.abs(actual - expected) < tolerance, `expected ${actual} to be within ${tolerance} of ${expected}`);
@@ -1761,6 +1764,221 @@ function testTranscriptParserRuntime() {
   }
 }
 
+function testTranscriptEvidenceAdapterRuntime() {
+  assert.throws(() => adaptTranscriptEvidenceCandidates(), /input must be an object/);
+  assert.throws(() => adaptTranscriptEvidenceCandidates({}), /input\.candidates must be an array/);
+
+  {
+    const candidates = parseTranscriptEvidenceCandidates("--- SYNTAX: .\\core\\evidenceGate.js ---\nPASS");
+    const adapted = adaptTranscriptEvidenceCandidates({ candidates });
+
+    assert.strictEqual(adapted.evidence.length, 1);
+    assert.strictEqual(adapted.excluded.length, 0);
+    assert.deepStrictEqual(adapted.evidence[0], {
+      kind: "syntax",
+      subject: "core/evidenceGate.js",
+      result: "pass",
+      summary: "Syntax check passed for core/evidenceGate.js",
+      label: "syntax pass",
+      data: {
+        source: "transcript",
+        lineNumber: 2,
+        matchedText: "PASS",
+        sectionLabel: "SYNTAX: .\\core\\evidenceGate.js"
+      }
+    });
+  }
+
+  {
+    const candidates = parseTranscriptEvidenceCandidates("--- FULL TEST HARNESS ---\nAll Nodex tests passed");
+    const adapted = adaptTranscriptEvidenceCandidates({ candidates });
+
+    assert.strictEqual(adapted.evidence.length, 1);
+    assert.strictEqual(adapted.excluded.length, 0);
+    assert.strictEqual(adapted.evidence[0].kind, "test");
+    assert.strictEqual(adapted.evidence[0].subject, "tests/run.js");
+    assert.strictEqual(adapted.evidence[0].summary, "All Nodex tests passed");
+  }
+
+  {
+    const candidates = parseTranscriptEvidenceCandidates('{"status":"success","value":1}');
+    const adapted = adaptTranscriptEvidenceCandidates({ candidates });
+
+    assert.strictEqual(adapted.evidence.length, 0);
+    assert.strictEqual(adapted.excluded.length, 1);
+    assert.strictEqual(adapted.excluded[0].reason, "missing_subject");
+    assert.strictEqual(adapted.excluded[0].candidate.kind, "targeted_command");
+  }
+
+  {
+    const candidates = parseTranscriptEvidenceCandidates(
+      "--- POST-COMMIT STATUS ---\n\n--- NEXT ---\n M .\\tests\\run.js\n[main c360a2d] Add deterministic evidence gate\nc360a2d (HEAD -> main) Add deterministic evidence gate"
+    );
+    const adapted = adaptTranscriptEvidenceCandidates({ candidates });
+
+    assert.strictEqual(adapted.evidence.length, 0);
+    assert.strictEqual(adapted.excluded.length, 4);
+    assert(adapted.excluded.every(entry => entry.reason === "unsupported_kind"));
+    assert(adapted.excluded.every(entry => entry.candidate.kind === "git"));
+  }
+
+  {
+    const adapted = adaptTranscriptEvidenceCandidates({
+      candidates: [
+        {
+          kind: "inspection",
+          subject: "core/transcriptParser.js",
+          result: "info",
+          summary: "Manual inspection recorded",
+          label: "inspection note",
+          data: {
+            source: "manual"
+          }
+        }
+      ]
+    });
+
+    assert.strictEqual(adapted.evidence.length, 1);
+    assert.strictEqual(adapted.excluded.length, 0);
+    assert.strictEqual(adapted.evidence[0].kind, "inspection");
+    assert.strictEqual(adapted.evidence[0].subject, "core/transcriptParser.js");
+  }
+
+  {
+    const adapted = adaptTranscriptEvidenceCandidates({
+      candidates: [
+        {
+          kind: "runtime",
+          subject: "core/evidenceGate.js",
+          result: "pass",
+          summary: "Runtime check passed",
+          data: {
+            durationMs: 12
+          }
+        }
+      ]
+    });
+
+    assert.strictEqual(adapted.evidence.length, 1);
+    assert.strictEqual(adapted.excluded.length, 0);
+    assert.strictEqual(adapted.evidence[0].kind, "runtime");
+    assert.strictEqual(adapted.evidence[0].subject, "core/evidenceGate.js");
+  }
+
+  {
+    const adapted = adaptTranscriptEvidenceCandidates({
+      candidates: [
+        {
+          kind: "deploy",
+          subject: "core/evidenceGate.js",
+          result: "pass",
+          summary: "Unsupported kind"
+        }
+      ]
+    });
+
+    assert.strictEqual(adapted.evidence.length, 0);
+    assert.strictEqual(adapted.excluded.length, 1);
+    assert.strictEqual(adapted.excluded[0].reason, "unsupported_kind");
+  }
+
+  {
+    const adapted = adaptTranscriptEvidenceCandidates({
+      candidates: [
+        {
+          kind: "syntax",
+          result: "pass",
+          summary: "Missing subject"
+        }
+      ]
+    });
+
+    assert.strictEqual(adapted.evidence.length, 0);
+    assert.strictEqual(adapted.excluded.length, 1);
+    assert.strictEqual(adapted.excluded[0].reason, "missing_subject");
+  }
+
+  {
+    const adapted = adaptTranscriptEvidenceCandidates({
+      candidates: [
+        {
+          kind: "runtime",
+          subject: "core/evidenceGate.js",
+          result: "pass",
+          summary: "Invalid data",
+          data: []
+        }
+      ]
+    });
+
+    assert.strictEqual(adapted.evidence.length, 0);
+    assert.strictEqual(adapted.excluded.length, 1);
+    assert.strictEqual(adapted.excluded[0].reason, "invalid_data");
+  }
+
+  {
+    const input = {
+      candidates: [
+        {
+          kind: "inspection",
+          subject: "  core/transcriptParser.js  ",
+          result: "info",
+          summary: "Nested data preserved",
+          label: "manual inspection",
+          data: {
+            nested: {
+              ok: true
+            },
+            items: [1, { value: 2 }]
+          }
+        }
+      ]
+    };
+    const snapshot = JSON.parse(JSON.stringify(input));
+    const adapted = adaptTranscriptEvidenceCandidates(input);
+
+    assert.deepStrictEqual(input, snapshot);
+    assert.notStrictEqual(adapted.evidence[0], input.candidates[0]);
+    assert.notStrictEqual(adapted.evidence[0].data, input.candidates[0].data);
+    assert.notStrictEqual(adapted.evidence[0].data.nested, input.candidates[0].data.nested);
+    assert.notStrictEqual(adapted.evidence[0].data.items, input.candidates[0].data.items);
+
+    adapted.evidence[0].data.nested.ok = false;
+    adapted.evidence[0].data.items[1].value = 3;
+
+    assert.strictEqual(input.candidates[0].data.nested.ok, true);
+    assert.strictEqual(input.candidates[0].data.items[1].value, 2);
+    assert.strictEqual(adapted.evidence[0].subject, "core/transcriptParser.js");
+  }
+
+  {
+    const candidates = parseTranscriptEvidenceCandidates("--- SYNTAX: core/evidenceGate.js ---\nPASS");
+    const adapted = adaptTranscriptEvidenceCandidates({ candidates });
+    const record = createEvidenceGateRecord({
+      version: 1,
+      seamId: "transcript_evidence_adapter_v1",
+      files: ["core/evidenceGate.js"],
+      evidence: adapted.evidence
+    });
+
+    assert.strictEqual(validateEvidenceGateRecord(record), true);
+    assert.strictEqual(record.evidence.length, 1);
+    assert.strictEqual(record.evidence[0].subject, "core/evidenceGate.js");
+  }
+
+  {
+    const candidates = parseTranscriptEvidenceCandidates("--- SYNTAX: core/evidenceGate.js ---\nPASS");
+    const adapted = adaptTranscriptEvidenceCandidates({ candidates });
+
+    assert.throws(() => createEvidenceGateRecord({
+      version: 1,
+      seamId: "transcript_evidence_adapter_v1",
+      files: ["tests/run.js"],
+      evidence: adapted.evidence
+    }), /subject|claimed file/i);
+  }
+}
+
 function testFallbackRouting() {
   assert.strictEqual(fallbackDecision("generate an image of a workstation").tool, "image");
   assert.strictEqual(fallbackDecision("make a video animation").tool, "video");
@@ -2081,6 +2299,7 @@ async function run() {
   testMemoryCapsuleRuntime();
   testEvidenceGateRuntime();
   testTranscriptParserRuntime();
+  testTranscriptEvidenceAdapterRuntime();
   testFallbackRouting();
   testPythonSandboxSafeExecution();
   testSandboxAllowsInternalOpen();

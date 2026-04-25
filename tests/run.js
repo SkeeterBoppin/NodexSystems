@@ -45,7 +45,7 @@ function assertApproximatelyArrayEqual(actual, expected, tolerance = 1e-12) {
 
 async function testRegistry() {
   const registry = createRegistry();
-  ["image", "video", "audio", "code", "ffmpeg", "math", "geometry", "unit", "trig", "logic", "vector"].forEach(name => {
+  ["image", "video", "audio", "code", "ffmpeg", "math", "geometry", "unit", "trig", "logic", "vector", "matrix"].forEach(name => {
     assert(registry.has(name), `missing tool: ${name}`);
   });
 }
@@ -593,6 +593,254 @@ async function testVectorRouteCapOverflow() {
   assert(result.error.includes("128"));
 }
 
+async function testMatrixRouteAdd() {
+  const result = await routeTask({
+    tool: "matrix",
+    input: {
+      operation: "matrix_add",
+      left: [[1, 2], [3, 4]],
+      right: [[5, 6], [7, 8]]
+    }
+  });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.operation, "matrix_add");
+  assert.strictEqual(payload.rows, 2);
+  assert.strictEqual(payload.cols, 2);
+  assert.deepStrictEqual(payload.result, [[6, 8], [10, 12]]);
+}
+
+async function testMatrixRouteSubtract() {
+  const result = await routeTask({
+    tool: "matrix",
+    input: {
+      operation: "matrix_subtract",
+      left: [[5, 6], [7, 8]],
+      right: [[1, 2], [3, 4]]
+    }
+  });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.operation, "matrix_subtract");
+  assert.strictEqual(payload.rows, 2);
+  assert.strictEqual(payload.cols, 2);
+  assert.deepStrictEqual(payload.result, [[4, 4], [4, 4]]);
+}
+
+async function testMatrixRouteScalarMultiply() {
+  const result = await routeTask({
+    tool: "matrix",
+    input: {
+      operation: "scalar_multiply",
+      scalar: 2,
+      matrix: [[1, -2], [0, 3]]
+    }
+  });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.operation, "scalar_multiply");
+  assert.strictEqual(payload.rows, 2);
+  assert.strictEqual(payload.cols, 2);
+  assert.deepStrictEqual(payload.result, [[2, -4], [0, 6]]);
+}
+
+async function testMatrixRouteVectorMultiply() {
+  const result = await routeTask({
+    tool: "matrix",
+    input: {
+      operation: "matrix_vector_multiply",
+      matrix: [[1, 2], [3, 4]],
+      vector: [5, 6]
+    }
+  });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.operation, "matrix_vector_multiply");
+  assert.strictEqual(payload.dimension, 2);
+  assert.deepStrictEqual(payload.result, [17, 39]);
+}
+
+async function testMatrixRouteMultiply() {
+  const result = await routeTask({
+    tool: "matrix",
+    input: {
+      operation: "matrix_multiply",
+      left: [[1, 2, 3], [4, 5, 6]],
+      right: [[7, 8], [9, 10], [11, 12]]
+    }
+  });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.operation, "matrix_multiply");
+  assert.strictEqual(payload.rows, 2);
+  assert.strictEqual(payload.cols, 2);
+  assert.deepStrictEqual(payload.result, [[58, 64], [139, 154]]);
+}
+
+async function testMatrixRouteTranspose() {
+  const result = await routeTask({
+    tool: "matrix",
+    input: {
+      operation: "transpose",
+      matrix: [[1, 2, 3], [4, 5, 6]]
+    }
+  });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.operation, "transpose");
+  assert.strictEqual(payload.rows, 3);
+  assert.strictEqual(payload.cols, 2);
+  assert.deepStrictEqual(payload.result, [[1, 4], [2, 5], [3, 6]]);
+}
+
+async function testMatrixRouteIdentity() {
+  const result = await routeTask({
+    tool: "matrix",
+    input: {
+      operation: "identity",
+      size: 3
+    }
+  });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.operation, "identity");
+  assert.strictEqual(payload.size, 3);
+  assert.strictEqual(payload.rows, 3);
+  assert.strictEqual(payload.cols, 3);
+  assert.deepStrictEqual(payload.result, [[1, 0, 0], [0, 1, 0], [0, 0, 1]]);
+}
+
+async function testMatrixRouteDeterminant2x2() {
+  const result = await routeTask({
+    tool: "matrix",
+    input: {
+      operation: "determinant_2x2",
+      matrix: [[1, 2], [3, 4]]
+    }
+  });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.operation, "determinant_2x2");
+  assert.strictEqual(payload.size, 2);
+  assert.strictEqual(payload.result, -2);
+}
+
+async function testMatrixRouteDeterminant3x3() {
+  const result = await routeTask({
+    tool: "matrix",
+    input: {
+      operation: "determinant_3x3",
+      matrix: [[6, 1, 1], [4, -2, 5], [2, 8, 7]]
+    }
+  });
+  assert.strictEqual(result.status, "success");
+
+  const payload = JSON.parse(result.output);
+  assert.strictEqual(payload.status, "success");
+  assert.strictEqual(payload.operation, "determinant_3x3");
+  assert.strictEqual(payload.size, 3);
+  assert.strictEqual(payload.result, -306);
+}
+
+async function testMatrixRouteUnknownOperation() {
+  const result = await routeTask({
+    tool: "matrix",
+    input: { operation: "inverse", matrix: [[1, 2], [3, 4]] }
+  });
+  assert.strictEqual(result.status, "error");
+  assert(result.error.includes("Unknown matrix operation"));
+}
+
+async function testMatrixRouteRaggedMatrix() {
+  const result = await routeTask({
+    tool: "matrix",
+    input: {
+      operation: "transpose",
+      matrix: [[1, 2], [3]]
+    }
+  });
+  assert.strictEqual(result.status, "error");
+  assert(result.error.includes("rectangular"));
+}
+
+async function testMatrixRouteAddShapeMismatch() {
+  const result = await routeTask({
+    tool: "matrix",
+    input: {
+      operation: "matrix_add",
+      left: [[1, 2], [3, 4]],
+      right: [[5, 6]]
+    }
+  });
+  assert.strictEqual(result.status, "error");
+  assert(result.error.includes("same rows and columns"));
+}
+
+async function testMatrixRouteMultiplyIncompatibleDimensions() {
+  const result = await routeTask({
+    tool: "matrix",
+    input: {
+      operation: "matrix_multiply",
+      left: [[1, 2], [3, 4]],
+      right: [[5, 6]]
+    }
+  });
+  assert.strictEqual(result.status, "error");
+  assert(result.error.includes("left column count"));
+}
+
+async function testMatrixRouteNonFiniteElement() {
+  const result = await routeTask({
+    tool: "matrix",
+    input: {
+      operation: "transpose",
+      matrix: [[1, Infinity]]
+    }
+  });
+  assert.strictEqual(result.status, "error");
+  assert(result.error.includes("finite number"));
+}
+
+async function testMatrixRouteDeterminantWrongSize() {
+  const result = await routeTask({
+    tool: "matrix",
+    input: {
+      operation: "determinant_2x2",
+      matrix: [[1, 2, 3], [4, 5, 6]]
+    }
+  });
+  assert.strictEqual(result.status, "error");
+  assert(result.error.includes("exactly 2x2"));
+}
+
+async function testMatrixRouteCapOverflow() {
+  const result = await routeTask({
+    tool: "matrix",
+    input: {
+      operation: "transpose",
+      matrix: Array.from({ length: 33 }, (_, index) => [index])
+    }
+  });
+  assert.strictEqual(result.status, "error");
+  assert(result.error.includes("32"));
+}
+
 function testFallbackRouting() {
   assert.strictEqual(fallbackDecision("generate an image of a workstation").tool, "image");
   assert.strictEqual(fallbackDecision("make a video animation").tool, "video");
@@ -878,6 +1126,22 @@ async function run() {
   await testVectorRouteNonFiniteElement();
   await testVectorRouteUnknownOperation();
   await testVectorRouteCapOverflow();
+  await testMatrixRouteAdd();
+  await testMatrixRouteSubtract();
+  await testMatrixRouteScalarMultiply();
+  await testMatrixRouteVectorMultiply();
+  await testMatrixRouteMultiply();
+  await testMatrixRouteTranspose();
+  await testMatrixRouteIdentity();
+  await testMatrixRouteDeterminant2x2();
+  await testMatrixRouteDeterminant3x3();
+  await testMatrixRouteUnknownOperation();
+  await testMatrixRouteRaggedMatrix();
+  await testMatrixRouteAddShapeMismatch();
+  await testMatrixRouteMultiplyIncompatibleDimensions();
+  await testMatrixRouteNonFiniteElement();
+  await testMatrixRouteDeterminantWrongSize();
+  await testMatrixRouteCapOverflow();
   testFallbackRouting();
   testPythonSandboxSafeExecution();
   testSandboxAllowsInternalOpen();

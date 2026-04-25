@@ -8,6 +8,7 @@ const unitTool = require("./unitTool");
 const trigTool = require("./trigTool");
 const logicTool = require("./logicTool");
 const vectorTool = require("./vectorTool");
+const matrixTool = require("./matrixTool");
 const pythonTool = require("./pythonTool");
 const readFileTool = require("./readFileTool");
 const writeFileTool = require("./writeFileTool");
@@ -154,6 +155,21 @@ function createRegistry() {
         right: "number[]",
         vector: "number[]",
         scalar: "number"
+      },
+      outputs: { output: "string", data: "object" }
+    }),
+    createToolDefinition({
+      key: "matrix",
+      aliases: ["matrices", "matrix_math"],
+      tool: matrixTool,
+      inputs: {
+        operation: "matrix_add|matrix_subtract|scalar_multiply|matrix_vector_multiply|matrix_multiply|transpose|identity|determinant_2x2|determinant_3x3",
+        left: "number[][]",
+        right: "number[][]",
+        matrix: "number[][]",
+        vector: "number[]",
+        scalar: "number",
+        size: "integer"
       },
       outputs: { output: "string", data: "object" }
     }),

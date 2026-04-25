@@ -1,0 +1,650 @@
+{
+  "version": 1,
+  "epistemicModes": [
+    {
+      "id": "empirical_measurement",
+      "name": "Empirical Measurement",
+      "description": "Claims grounded in observation, experiment, or measurement."
+    },
+    {
+      "id": "mathematical_derivation",
+      "name": "Mathematical Derivation",
+      "description": "Claims grounded in formal calculation or derivation."
+    },
+    {
+      "id": "formal_logic",
+      "name": "Formal Logic",
+      "description": "Claims grounded in explicit logical structure or proof."
+    },
+    {
+      "id": "historical_attestation",
+      "name": "Historical Attestation",
+      "description": "Claims grounded in dated records, witnesses, or historical transmission."
+    },
+    {
+      "id": "textual_philology",
+      "name": "Textual Philology",
+      "description": "Claims grounded in source texts, manuscripts, and language analysis."
+    },
+    {
+      "id": "traditional_rule",
+      "name": "Traditional Rule",
+      "description": "Claims grounded in tradition-specific rules or inherited systems."
+    },
+    {
+      "id": "symbolic_interpretation",
+      "name": "Symbolic Interpretation",
+      "description": "Claims grounded in symbolic meaning within a defined tradition."
+    },
+    {
+      "id": "metaphysical_claim",
+      "name": "Metaphysical Claim",
+      "description": "Claims grounded in metaphysical framing rather than empirical measurement."
+    },
+    {
+      "id": "theological_doctrine",
+      "name": "Theological Doctrine",
+      "description": "Claims grounded in doctrinal formulation and theological interpretation."
+    },
+    {
+      "id": "philosophical_argument",
+      "name": "Philosophical Argument",
+      "description": "Claims grounded in philosophical reasoning and argument structure."
+    },
+    {
+      "id": "comparative_analysis",
+      "name": "Comparative Analysis",
+      "description": "Claims grounded in comparison across sources, systems, or frameworks."
+    }
+  ],
+  "claimTypes": [
+    {
+      "id": "computed_result",
+      "name": "Computed Result",
+      "description": "A result produced through deterministic calculation."
+    },
+    {
+      "id": "formula_definition",
+      "name": "Formula Definition",
+      "description": "A formal definition of a formula or rule."
+    },
+    {
+      "id": "historical_claim",
+      "name": "Historical Claim",
+      "description": "A claim about historical events, contexts, or attestations."
+    },
+    {
+      "id": "textual_claim",
+      "name": "Textual Claim",
+      "description": "A claim about wording, structure, or content of a text."
+    },
+    {
+      "id": "translation_claim",
+      "name": "Translation Claim",
+      "description": "A claim about translation choices or renderings."
+    },
+    {
+      "id": "etymology_claim",
+      "name": "Etymology Claim",
+      "description": "A claim about word origins or lexical development."
+    },
+    {
+      "id": "doctrinal_claim",
+      "name": "Doctrinal Claim",
+      "description": "A claim about doctrine, creed, or theology."
+    },
+    {
+      "id": "symbolic_claim",
+      "name": "Symbolic Claim",
+      "description": "A claim about symbolic correspondences or meanings."
+    },
+    {
+      "id": "metaphysical_claim",
+      "name": "Metaphysical Claim",
+      "description": "A claim about being, causation, or metaphysical order."
+    },
+    {
+      "id": "empirical_claim",
+      "name": "Empirical Claim",
+      "description": "A claim grounded in observation or experiment."
+    },
+    {
+      "id": "interpretive_claim",
+      "name": "Interpretive Claim",
+      "description": "A claim about interpretation of a source, symbol, or argument."
+    },
+    {
+      "id": "logical_argument",
+      "name": "Logical Argument",
+      "description": "A claim expressed as an explicit argument or proof."
+    }
+  ],
+  "sourceTypes": [
+    {
+      "id": "primary_text",
+      "name": "Primary Text",
+      "description": "A primary textual source."
+    },
+    {
+      "id": "critical_edition",
+      "name": "Critical Edition",
+      "description": "A critical edition of a source text."
+    },
+    {
+      "id": "manuscript_witness",
+      "name": "Manuscript Witness",
+      "description": "A manuscript witness or textual witness."
+    },
+    {
+      "id": "inscription",
+      "name": "Inscription",
+      "description": "An inscriptional source."
+    },
+    {
+      "id": "original_language_lexicon",
+      "name": "Original Language Lexicon",
+      "description": "A lexicon for the original language of a source."
+    },
+    {
+      "id": "scholarly_translation",
+      "name": "Scholarly Translation",
+      "description": "A scholarly translation of a source."
+    },
+    {
+      "id": "traditional_commentary",
+      "name": "Traditional Commentary",
+      "description": "A tradition-specific commentary source."
+    },
+    {
+      "id": "peer_reviewed_paper",
+      "name": "Peer Reviewed Paper",
+      "description": "A peer reviewed academic paper."
+    },
+    {
+      "id": "textbook",
+      "name": "Textbook",
+      "description": "A textbook or formal instructional reference."
+    },
+    {
+      "id": "dataset",
+      "name": "Dataset",
+      "description": "A dataset used for empirical or computational analysis."
+    },
+    {
+      "id": "experimental_result",
+      "name": "Experimental Result",
+      "description": "An experimental result or measurement output."
+    },
+    {
+      "id": "oral_tradition_record",
+      "name": "Oral Tradition Record",
+      "description": "A recorded oral tradition source."
+    },
+    {
+      "id": "modern_secondary_analysis",
+      "name": "Modern Secondary Analysis",
+      "description": "A modern secondary analysis or review source."
+    }
+  ],
+  "validationRules": [
+    {
+      "id": "scientific_empirical",
+      "name": "Scientific Empirical",
+      "description": "Validation profile for modern scientific and computational domains.",
+      "allowedEpistemicModeIds": [
+        "empirical_measurement",
+        "mathematical_derivation",
+        "formal_logic",
+        "comparative_analysis"
+      ],
+      "allowedClaimTypeIds": [
+        "empirical_claim",
+        "computed_result",
+        "formula_definition",
+        "logical_argument"
+      ],
+      "allowedSourceTypeIds": [
+        "peer_reviewed_paper",
+        "textbook",
+        "dataset",
+        "experimental_result"
+      ],
+      "requirements": [
+        "Empirical claims require empirical source grounding.",
+        "Computed results require deterministic tool or formula provenance."
+      ],
+      "prohibitions": [
+        "Do not present symbolic interpretation as empirical measurement."
+      ]
+    },
+    {
+      "id": "mathematical_formal",
+      "name": "Mathematical Formal",
+      "description": "Validation profile for formal mathematical content.",
+      "allowedEpistemicModeIds": [
+        "mathematical_derivation",
+        "formal_logic"
+      ],
+      "allowedClaimTypeIds": [
+        "computed_result",
+        "formula_definition",
+        "logical_argument"
+      ],
+      "allowedSourceTypeIds": [
+        "textbook",
+        "peer_reviewed_paper"
+      ],
+      "requirements": [
+        "Formal claims require explicit definitions, derivations, or deterministic computation."
+      ],
+      "prohibitions": [
+        "Do not infer empirical truth from formal validity alone."
+      ]
+    },
+    {
+      "id": "symbolic_traditional",
+      "name": "Symbolic Traditional",
+      "description": "Validation profile for symbolic and traditional systems.",
+      "allowedEpistemicModeIds": [
+        "historical_attestation",
+        "traditional_rule",
+        "symbolic_interpretation",
+        "comparative_analysis"
+      ],
+      "allowedClaimTypeIds": [
+        "historical_claim",
+        "symbolic_claim",
+        "interpretive_claim",
+        "textual_claim"
+      ],
+      "allowedSourceTypeIds": [
+        "primary_text",
+        "critical_edition",
+        "scholarly_translation",
+        "traditional_commentary",
+        "modern_secondary_analysis"
+      ],
+      "requirements": [
+        "Symbolic systems must preserve tradition-specific terminology.",
+        "Traditional rules must be separated from empirical causal claims."
+      ],
+      "prohibitions": [
+        "Do not present traditional symbolic claims as validated physical causation."
+      ]
+    },
+    {
+      "id": "theological_textual",
+      "name": "Theological Textual",
+      "description": "Validation profile for theology and related textual analysis.",
+      "allowedEpistemicModeIds": [
+        "theological_doctrine",
+        "textual_philology",
+        "historical_attestation",
+        "comparative_analysis"
+      ],
+      "allowedClaimTypeIds": [
+        "doctrinal_claim",
+        "textual_claim",
+        "translation_claim",
+        "historical_claim",
+        "interpretive_claim"
+      ],
+      "allowedSourceTypeIds": [
+        "primary_text",
+        "critical_edition",
+        "manuscript_witness",
+        "original_language_lexicon",
+        "scholarly_translation",
+        "traditional_commentary",
+        "modern_secondary_analysis"
+      ],
+      "requirements": [
+        "Theological claims must distinguish primary text, doctrine, commentary, and later interpretation.",
+        "Translation claims require language or lexicon grounding."
+      ],
+      "prohibitions": [
+        "Do not flatten doctrinal claims into empirical claims."
+      ]
+    },
+    {
+      "id": "philological_textual",
+      "name": "Philological Textual",
+      "description": "Validation profile for philological and linguistic analysis.",
+      "allowedEpistemicModeIds": [
+        "textual_philology",
+        "historical_attestation",
+        "comparative_analysis"
+      ],
+      "allowedClaimTypeIds": [
+        "textual_claim",
+        "translation_claim",
+        "etymology_claim",
+        "historical_claim",
+        "interpretive_claim"
+      ],
+      "allowedSourceTypeIds": [
+        "primary_text",
+        "critical_edition",
+        "manuscript_witness",
+        "inscription",
+        "original_language_lexicon",
+        "scholarly_translation",
+        "modern_secondary_analysis"
+      ],
+      "requirements": [
+        "Philological claims require source-text, language, or lexical grounding.",
+        "Etymology claims must distinguish attestation from speculation."
+      ],
+      "prohibitions": [
+        "Do not treat translation choice as settled fact without source grounding."
+      ]
+    },
+    {
+      "id": "philosophical_argument",
+      "name": "Philosophical Argument",
+      "description": "Validation profile for philosophical reasoning and interpretation.",
+      "allowedEpistemicModeIds": [
+        "philosophical_argument",
+        "formal_logic",
+        "textual_philology",
+        "comparative_analysis"
+      ],
+      "allowedClaimTypeIds": [
+        "logical_argument",
+        "interpretive_claim",
+        "textual_claim",
+        "metaphysical_claim"
+      ],
+      "allowedSourceTypeIds": [
+        "primary_text",
+        "critical_edition",
+        "scholarly_translation",
+        "textbook",
+        "modern_secondary_analysis"
+      ],
+      "requirements": [
+        "Philosophical claims must distinguish argument structure from interpretation.",
+        "Metaphysical claims must be labeled as metaphysical, not empirical by default."
+      ],
+      "prohibitions": [
+        "Do not present philosophical argument as experimental verification."
+      ]
+    },
+    {
+      "id": "cosmology_scientific",
+      "name": "Cosmology Scientific",
+      "description": "Validation profile for empirical and mathematical cosmology.",
+      "allowedEpistemicModeIds": [
+        "empirical_measurement",
+        "mathematical_derivation",
+        "formal_logic",
+        "comparative_analysis"
+      ],
+      "allowedClaimTypeIds": [
+        "empirical_claim",
+        "computed_result",
+        "formula_definition",
+        "historical_claim"
+      ],
+      "allowedSourceTypeIds": [
+        "peer_reviewed_paper",
+        "textbook",
+        "dataset",
+        "experimental_result"
+      ],
+      "requirements": [
+        "Scientific cosmology claims require empirical, mathematical, or dataset grounding."
+      ],
+      "prohibitions": [
+        "Do not mix scientific cosmology with religious or metaphysical cosmology without explicit classification."
+      ]
+    },
+    {
+      "id": "cosmology_traditional",
+      "name": "Cosmology Traditional",
+      "description": "Validation profile for ancient, religious, or metaphysical cosmologies.",
+      "allowedEpistemicModeIds": [
+        "historical_attestation",
+        "textual_philology",
+        "symbolic_interpretation",
+        "metaphysical_claim",
+        "theological_doctrine",
+        "comparative_analysis"
+      ],
+      "allowedClaimTypeIds": [
+        "historical_claim",
+        "textual_claim",
+        "symbolic_claim",
+        "metaphysical_claim",
+        "doctrinal_claim",
+        "interpretive_claim"
+      ],
+      "allowedSourceTypeIds": [
+        "primary_text",
+        "critical_edition",
+        "scholarly_translation",
+        "traditional_commentary",
+        "modern_secondary_analysis"
+      ],
+      "requirements": [
+        "Traditional cosmologies must be classified by textual, symbolic, doctrinal, or metaphysical mode."
+      ],
+      "prohibitions": [
+        "Do not present ancient, religious, or metaphysical cosmology as modern empirical cosmology."
+      ]
+    }
+  ],
+  "domains": [
+    {
+      "id": "mathematics",
+      "name": "Mathematics",
+      "description": "Formal mathematical domain for deterministic derivation and proof.",
+      "validationRuleIds": [
+        "mathematical_formal"
+      ],
+      "defaultEpistemicModeIds": [
+        "mathematical_derivation",
+        "formal_logic"
+      ]
+    },
+    {
+      "id": "physics",
+      "name": "Physics",
+      "description": "Scientific domain for physical systems, laws, and measurable quantities.",
+      "validationRuleIds": [
+        "scientific_empirical"
+      ],
+      "defaultEpistemicModeIds": [
+        "empirical_measurement",
+        "mathematical_derivation"
+      ]
+    },
+    {
+      "id": "physics.general",
+      "name": "Physics General",
+      "parentId": "physics",
+      "description": "General physics classification for cross-cutting physical formulas and claims.",
+      "validationRuleIds": [
+        "scientific_empirical"
+      ],
+      "defaultEpistemicModeIds": [
+        "empirical_measurement",
+        "mathematical_derivation"
+      ]
+    },
+    {
+      "id": "physics.mechanics",
+      "name": "Physics Mechanics",
+      "parentId": "physics",
+      "description": "Mechanics classification for motion, force, and related deterministic formulas.",
+      "validationRuleIds": [
+        "scientific_empirical"
+      ],
+      "defaultEpistemicModeIds": [
+        "empirical_measurement",
+        "mathematical_derivation"
+      ]
+    },
+    {
+      "id": "physics.electromagnetism",
+      "name": "Physics Electromagnetism",
+      "parentId": "physics",
+      "description": "Electromagnetism classification for electric, magnetic, and circuit relations.",
+      "validationRuleIds": [
+        "scientific_empirical"
+      ],
+      "defaultEpistemicModeIds": [
+        "empirical_measurement",
+        "mathematical_derivation"
+      ]
+    },
+    {
+      "id": "chemistry",
+      "name": "Chemistry",
+      "description": "Scientific domain for chemical composition, reactions, and measurement.",
+      "validationRuleIds": [
+        "scientific_empirical"
+      ],
+      "defaultEpistemicModeIds": [
+        "empirical_measurement",
+        "mathematical_derivation"
+      ]
+    },
+    {
+      "id": "neuroscience",
+      "name": "Neuroscience",
+      "description": "Scientific domain for nervous system structure, function, and data analysis.",
+      "validationRuleIds": [
+        "scientific_empirical"
+      ],
+      "defaultEpistemicModeIds": [
+        "empirical_measurement",
+        "comparative_analysis"
+      ]
+    },
+    {
+      "id": "astrology",
+      "name": "Astrology",
+      "description": "Traditional symbolic domain classified separately from empirical science.",
+      "validationRuleIds": [
+        "symbolic_traditional"
+      ],
+      "defaultEpistemicModeIds": [
+        "symbolic_interpretation",
+        "traditional_rule"
+      ]
+    },
+    {
+      "id": "cosmology",
+      "name": "Cosmology",
+      "description": "Umbrella cosmology domain for traditional and scientific cosmological classifications.",
+      "validationRuleIds": [
+        "cosmology_traditional"
+      ],
+      "defaultEpistemicModeIds": [
+        "comparative_analysis",
+        "textual_philology"
+      ]
+    },
+    {
+      "id": "cosmology.scientific",
+      "name": "Cosmology Scientific",
+      "parentId": "cosmology",
+      "description": "Scientific cosmology classification for modern empirical and mathematical models.",
+      "validationRuleIds": [
+        "cosmology_scientific"
+      ],
+      "defaultEpistemicModeIds": [
+        "empirical_measurement",
+        "mathematical_derivation"
+      ]
+    },
+    {
+      "id": "cosmology.ancient",
+      "name": "Cosmology Ancient",
+      "parentId": "cosmology",
+      "description": "Ancient cosmology classification for historically transmitted cosmological systems.",
+      "validationRuleIds": [
+        "cosmology_traditional"
+      ],
+      "defaultEpistemicModeIds": [
+        "historical_attestation",
+        "textual_philology"
+      ]
+    },
+    {
+      "id": "cosmology.religious",
+      "name": "Cosmology Religious",
+      "parentId": "cosmology",
+      "description": "Religious cosmology classification for doctrinal and text-grounded cosmological claims.",
+      "validationRuleIds": [
+        "cosmology_traditional"
+      ],
+      "defaultEpistemicModeIds": [
+        "theological_doctrine",
+        "textual_philology"
+      ]
+    },
+    {
+      "id": "cosmology.metaphysical",
+      "name": "Cosmology Metaphysical",
+      "parentId": "cosmology",
+      "description": "Metaphysical cosmology classification for non-empirical cosmological frameworks.",
+      "validationRuleIds": [
+        "cosmology_traditional"
+      ],
+      "defaultEpistemicModeIds": [
+        "metaphysical_claim",
+        "comparative_analysis"
+      ]
+    },
+    {
+      "id": "theology",
+      "name": "Theology",
+      "description": "Theological domain for doctrine, scripture, commentary, and interpretation.",
+      "validationRuleIds": [
+        "theological_textual"
+      ],
+      "defaultEpistemicModeIds": [
+        "theological_doctrine",
+        "textual_philology"
+      ]
+    },
+    {
+      "id": "classics",
+      "name": "Classics",
+      "description": "Philological domain for classical texts, manuscripts, and historical language study.",
+      "validationRuleIds": [
+        "philological_textual"
+      ],
+      "defaultEpistemicModeIds": [
+        "textual_philology",
+        "historical_attestation"
+      ]
+    },
+    {
+      "id": "linguistics",
+      "name": "Linguistics",
+      "description": "Philological domain for language structure, lexicon, and textual comparison.",
+      "validationRuleIds": [
+        "philological_textual"
+      ],
+      "defaultEpistemicModeIds": [
+        "textual_philology",
+        "comparative_analysis"
+      ]
+    },
+    {
+      "id": "philosophy",
+      "name": "Philosophy",
+      "description": "Philosophical domain for arguments, interpretation, and metaphysical reasoning.",
+      "validationRuleIds": [
+        "philosophical_argument"
+      ],
+      "defaultEpistemicModeIds": [
+        "philosophical_argument",
+        "formal_logic"
+      ]
+    }
+  ]
+}

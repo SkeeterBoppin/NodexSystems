@@ -1025,6 +1025,125 @@ async function testFormulaRouteMalformedInput() {
   assert(result.error.includes("JSON object"));
 }
 
+function testDomainOntologyManifest() {
+  const ontology = require("../Knowledge/domainOntology.json");
+  const idPattern = /^[a-z0-9]+(?:[._][a-z0-9]+)*$/;
+  const collections = [
+    ["epistemicModes", ontology.epistemicModes],
+    ["claimTypes", ontology.claimTypes],
+    ["sourceTypes", ontology.sourceTypes],
+    ["validationRules", ontology.validationRules],
+    ["domains", ontology.domains]
+  ];
+
+  assert.strictEqual(ontology.version, 1);
+
+  function indexCollection(name, items) {
+    assert(Array.isArray(items), `${name} must be an array`);
+    assert(items.length > 0, `${name} must not be empty`);
+
+    const map = new Map();
+    items.forEach(item => {
+      assert(item && typeof item === "object" && !Array.isArray(item), `${name} entries must be objects`);
+      assert.strictEqual(typeof item.id, "string", `${name} ids must be strings`);
+      assert(item.id.length > 0, `${name} ids must be non-empty`);
+      assert(idPattern.test(item.id), `${name} id must be stable lowercase underscore/dot: ${item.id}`);
+      assert.strictEqual(map.has(item.id), false, `${name} id must be unique: ${item.id}`);
+      map.set(item.id, item);
+    });
+
+    return map;
+  }
+
+  const epistemicModes = indexCollection(collections[0][0], collections[0][1]);
+  const claimTypes = indexCollection(collections[1][0], collections[1][1]);
+  const sourceTypes = indexCollection(collections[2][0], collections[2][1]);
+  const validationRules = indexCollection(collections[3][0], collections[3][1]);
+  const domains = indexCollection(collections[4][0], collections[4][1]);
+
+  ontology.validationRules.forEach(rule => {
+    assert(Array.isArray(rule.allowedEpistemicModeIds), `${rule.id} allowedEpistemicModeIds must be an array`);
+    assert(Array.isArray(rule.allowedClaimTypeIds), `${rule.id} allowedClaimTypeIds must be an array`);
+    assert(Array.isArray(rule.allowedSourceTypeIds), `${rule.id} allowedSourceTypeIds must be an array`);
+
+    rule.allowedEpistemicModeIds.forEach(modeId => {
+      assert(epistemicModes.has(modeId), `${rule.id} references unknown epistemic mode ${modeId}`);
+    });
+    rule.allowedClaimTypeIds.forEach(claimTypeId => {
+      assert(claimTypes.has(claimTypeId), `${rule.id} references unknown claim type ${claimTypeId}`);
+    });
+    rule.allowedSourceTypeIds.forEach(sourceTypeId => {
+      assert(sourceTypes.has(sourceTypeId), `${rule.id} references unknown source type ${sourceTypeId}`);
+    });
+  });
+
+  ontology.domains.forEach(domain => {
+    assert(Array.isArray(domain.validationRuleIds), `${domain.id} validationRuleIds must be an array`);
+    domain.validationRuleIds.forEach(ruleId => {
+      assert(validationRules.has(ruleId), `${domain.id} references unknown validation rule ${ruleId}`);
+    });
+
+    if (domain.parentId !== undefined && domain.parentId !== null) {
+      assert(domains.has(domain.parentId), `${domain.id} references unknown parentId ${domain.parentId}`);
+    }
+
+    if (domain.defaultEpistemicModeIds !== undefined) {
+      assert(Array.isArray(domain.defaultEpistemicModeIds), `${domain.id} defaultEpistemicModeIds must be an array`);
+      domain.defaultEpistemicModeIds.forEach(modeId => {
+        assert(epistemicModes.has(modeId), `${domain.id} references unknown default epistemic mode ${modeId}`);
+      });
+    }
+  });
+
+  const visiting = new Set();
+  const visited = new Set();
+
+  function visitDomain(domainId) {
+    if (visited.has(domainId)) {
+      return;
+    }
+
+    assert.strictEqual(visiting.has(domainId), false, `domain cycle detected at ${domainId}`);
+    visiting.add(domainId);
+
+    const domain = domains.get(domainId);
+    if (domain.parentId) {
+      visitDomain(domain.parentId);
+    }
+
+    visiting.delete(domainId);
+    visited.add(domainId);
+  }
+
+  domains.forEach((_, domainId) => {
+    visitDomain(domainId);
+  });
+
+  function assertDomainUsesRule(domainId, ruleId) {
+    const domain = domains.get(domainId);
+    assert(domain, `missing domain ${domainId}`);
+    assert(domain.validationRuleIds.includes(ruleId), `${domainId} must use ${ruleId}`);
+  }
+
+  ["physics.general", "physics.mechanics", "physics.electromagnetism"].forEach(domainId => {
+    assert(domains.has(domainId), `missing formula domain ${domainId}`);
+  });
+
+  assertDomainUsesRule("astrology", "symbolic_traditional");
+  assertDomainUsesRule("theology", "theological_textual");
+  assertDomainUsesRule("classics", "philological_textual");
+  assertDomainUsesRule("linguistics", "philological_textual");
+  assertDomainUsesRule("philosophy", "philosophical_argument");
+  assertDomainUsesRule("cosmology.scientific", "cosmology_scientific");
+  assertDomainUsesRule("cosmology.ancient", "cosmology_traditional");
+  assertDomainUsesRule("cosmology.religious", "cosmology_traditional");
+  assertDomainUsesRule("cosmology.metaphysical", "cosmology_traditional");
+  assertDomainUsesRule("mathematics", "mathematical_formal");
+  assertDomainUsesRule("physics", "scientific_empirical");
+  assertDomainUsesRule("chemistry", "scientific_empirical");
+  assertDomainUsesRule("neuroscience", "scientific_empirical");
+}
+
 function testFallbackRouting() {
   assert.strictEqual(fallbackDecision("generate an image of a workstation").tool, "image");
   assert.strictEqual(fallbackDecision("make a video animation").tool, "video");
@@ -1340,6 +1459,7 @@ async function run() {
   await testFormulaRouteDivideByZero();
   await testFormulaRouteUnknownOperation();
   await testFormulaRouteMalformedInput();
+  testDomainOntologyManifest();
   testFallbackRouting();
   testPythonSandboxSafeExecution();
   testSandboxAllowsInternalOpen();

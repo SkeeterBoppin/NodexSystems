@@ -43,6 +43,10 @@ const {
   validateMemoryCapsule
 } = require("../core/memoryCapsule");
 const {
+  createAgentHandoffPacket,
+  validateAgentHandoffPacket
+} = require("../core/agentHandoffPacket");
+const {
   createEvidenceGateRecord,
   validateEvidenceGateRecord
 } = require("../core/evidenceGate");
@@ -1366,6 +1370,217 @@ function testTaskGraphRuntime() {
   }
 }
 
+function buildAgentHandoffPacketInput() {
+  return {
+    version: 1,
+    packetId: " agent_handoff_packet_v1 ",
+    mode: " apply ",
+    type: " edit ",
+    title: " Implement Agent Handoff Packet ",
+    instructions: [" Add module ", " Add runtime tests "],
+    allowedFiles: [" core\\ ", " tests\\run.js "],
+    forbiddenFiles: [" evolution\\ "],
+    files: [" core\\agentHandoffPacket.js ", " tests\\run.js "],
+    validation: {
+      required: true,
+      gates: [" syntax ", " test "]
+    },
+    expectedDirtyState: {
+      files: [" core\\agentHandoffPacket.js ", " tests\\run.js "]
+    }
+  };
+}
+
+function testAgentHandoffPacketRuntime() {
+  {
+    const input = buildAgentHandoffPacketInput();
+    const packet = createAgentHandoffPacket(input);
+
+    assert.deepStrictEqual(packet, {
+      version: 1,
+      packetId: "agent_handoff_packet_v1",
+      mode: "apply",
+      type: "edit",
+      title: "Implement Agent Handoff Packet",
+      instructions: ["Add module", "Add runtime tests"],
+      allowedFiles: ["core/", "tests/run.js"],
+      forbiddenFiles: ["evolution/"],
+      files: ["core/agentHandoffPacket.js", "tests/run.js"],
+      validation: {
+        required: true,
+        gates: ["syntax", "test"]
+      },
+      expectedDirtyState: {
+        files: ["core/agentHandoffPacket.js", "tests/run.js"]
+      }
+    });
+    assert.strictEqual(input.packetId, " agent_handoff_packet_v1 ");
+    assert.deepStrictEqual(input.allowedFiles, [" core\\ ", " tests\\run.js "]);
+  }
+
+  {
+    const input = buildAgentHandoffPacketInput();
+    assert.strictEqual(validateAgentHandoffPacket(input), true);
+  }
+
+  {
+    const input = buildAgentHandoffPacketInput();
+    const snapshot = JSON.parse(JSON.stringify(input));
+    const packet = createAgentHandoffPacket(input);
+
+    assert.deepStrictEqual(input, snapshot);
+    assert.notStrictEqual(packet, input);
+    assert.notStrictEqual(packet.instructions, input.instructions);
+    assert.notStrictEqual(packet.allowedFiles, input.allowedFiles);
+    assert.notStrictEqual(packet.forbiddenFiles, input.forbiddenFiles);
+    assert.notStrictEqual(packet.files, input.files);
+    assert.notStrictEqual(packet.validation, input.validation);
+    assert.notStrictEqual(packet.validation.gates, input.validation.gates);
+    assert.notStrictEqual(packet.expectedDirtyState, input.expectedDirtyState);
+    assert.notStrictEqual(packet.expectedDirtyState.files, input.expectedDirtyState.files);
+
+    packet.validation.gates[0] = "runtime";
+    packet.expectedDirtyState.files[0] = "tests/run.js";
+
+    assert.strictEqual(input.validation.gates[0], " syntax ");
+    assert.strictEqual(input.expectedDirtyState.files[0], " core\\agentHandoffPacket.js ");
+  }
+
+  {
+    const input = buildAgentHandoffPacketInput();
+    input.extra = true;
+    assert.throws(() => createAgentHandoffPacket(input), /unknown/i);
+  }
+
+  {
+    const input = buildAgentHandoffPacketInput();
+    input.validation.extra = true;
+    assert.throws(() => createAgentHandoffPacket(input), /validation|unknown/i);
+  }
+
+  {
+    const input = buildAgentHandoffPacketInput();
+    input.type = "validate";
+    assert.throws(() => createAgentHandoffPacket(input), /mode|type/i);
+  }
+
+  {
+    const input = buildAgentHandoffPacketInput();
+    input.packetId = "agent-handoff-packet";
+    assert.throws(() => createAgentHandoffPacket(input), /packetId/i);
+  }
+
+  {
+    const input = buildAgentHandoffPacketInput();
+    input.instructions = [];
+    assert.throws(() => createAgentHandoffPacket(input), /instructions/i);
+  }
+
+  {
+    const absoluteInput = buildAgentHandoffPacketInput();
+    absoluteInput.allowedFiles = ["/core/"];
+    assert.throws(() => createAgentHandoffPacket(absoluteInput), /repo-relative|allowedFiles/i);
+
+    const driveInput = buildAgentHandoffPacketInput();
+    driveInput.allowedFiles = ["C:/core/"];
+    assert.throws(() => createAgentHandoffPacket(driveInput), /repo-relative|allowedFiles/i);
+
+    const uncInput = buildAgentHandoffPacketInput();
+    uncInput.allowedFiles = ["//server/share/"];
+    assert.throws(() => createAgentHandoffPacket(uncInput), /repo-relative|allowedFiles/i);
+
+    const traversalInput = buildAgentHandoffPacketInput();
+    traversalInput.files = ["../core/agentHandoffPacket.js", "tests/run.js"];
+    assert.throws(() => createAgentHandoffPacket(traversalInput), /\.\.|files/i);
+  }
+
+  {
+    const input = buildAgentHandoffPacketInput();
+    input.files = ["core/agentHandoffPacket.js", "tests/run.js", "memory/capsule.json"];
+    assert.throws(() => createAgentHandoffPacket(input), /allowedFiles/i);
+  }
+
+  {
+    const input = buildAgentHandoffPacketInput();
+    input.forbiddenFiles = ["tests/"];
+    assert.throws(() => createAgentHandoffPacket(input), /forbidden/i);
+  }
+
+  {
+    const input = buildAgentHandoffPacketInput();
+    input.forbiddenFiles = ["core/"];
+    assert.throws(() => createAgentHandoffPacket(input), /overlaps|forbidden/i);
+  }
+
+  {
+    const input = buildAgentHandoffPacketInput();
+    input.files = ["core\\agentHandoffPacket.js", "core/agentHandoffPacket.js"];
+    input.expectedDirtyState.files = ["core\\agentHandoffPacket.js"];
+    assert.throws(() => createAgentHandoffPacket(input), /duplicate|files/i);
+  }
+
+  {
+    const input = buildAgentHandoffPacketInput();
+    input.validation.gates = ["syntax", "git"];
+    assert.throws(() => createAgentHandoffPacket(input), /git/i);
+  }
+
+  {
+    const input = buildAgentHandoffPacketInput();
+    input.mode = "inspect_only";
+    input.type = "inspect";
+    assert.throws(() => createAgentHandoffPacket(input), /expectedDirtyState/i);
+  }
+
+  {
+    const input = buildAgentHandoffPacketInput();
+    input.mode = "validate_only";
+    input.type = "validate";
+    assert.throws(() => createAgentHandoffPacket(input), /expectedDirtyState/i);
+  }
+
+  {
+    const input = buildAgentHandoffPacketInput();
+    input.expectedDirtyState.files = [];
+    assert.throws(() => createAgentHandoffPacket(input), /expectedDirtyState/i);
+  }
+
+  {
+    const input = buildAgentHandoffPacketInput();
+    input.expectedDirtyState.files = ["core/agentHandoffPacket.js", "core/extra.js"];
+    assert.throws(() => createAgentHandoffPacket(input), /subset|expectedDirtyState/i);
+  }
+
+  {
+    const input = buildAgentHandoffPacketInput();
+    input.taskGraph = {
+      graphId: " taskgraph_example ",
+      stepId: " implement_module "
+    };
+    const packet = createAgentHandoffPacket(input);
+
+    assert.deepStrictEqual(packet.taskGraph, {
+      graphId: "taskgraph_example",
+      stepId: "implement_module"
+    });
+  }
+
+  {
+    const missingFieldInput = buildAgentHandoffPacketInput();
+    missingFieldInput.taskGraph = {
+      graphId: "taskgraph_example"
+    };
+    assert.throws(() => createAgentHandoffPacket(missingFieldInput), /taskGraph\.stepId|taskGraph/i);
+
+    const invalidIdInput = buildAgentHandoffPacketInput();
+    invalidIdInput.taskGraph = {
+      graphId: "taskgraph-example",
+      stepId: "implement_module"
+    };
+    assert.throws(() => createAgentHandoffPacket(invalidIdInput), /taskGraph\.graphId|taskGraph/i);
+  }
+}
+
 function buildMemoryCapsuleInput() {
   return {
     version: 1,
@@ -2296,6 +2511,7 @@ async function run() {
   await testFormulaRouteMalformedInput();
   testDomainOntologyManifest();
   testTaskGraphRuntime();
+  testAgentHandoffPacketRuntime();
   testMemoryCapsuleRuntime();
   testEvidenceGateRuntime();
   testTranscriptParserRuntime();

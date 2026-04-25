@@ -46,6 +46,9 @@ const {
   createEvidenceGateRecord,
   validateEvidenceGateRecord
 } = require("../core/evidenceGate");
+const {
+  parseTranscriptEvidenceCandidates
+} = require("../core/transcriptParser");
 
 function assertApproximatelyEqual(actual, expected, tolerance = 1e-12) {
   assert(Math.abs(actual - expected) < tolerance, `expected ${actual} to be within ${tolerance} of ${expected}`);
@@ -1653,6 +1656,111 @@ function testEvidenceGateRuntime() {
   }
 }
 
+function testTranscriptParserRuntime() {
+  assert.throws(() => parseTranscriptEvidenceCandidates(null), /transcriptText must be a string/);
+
+  assert.deepStrictEqual(parseTranscriptEvidenceCandidates(""), []);
+  assert.deepStrictEqual(parseTranscriptEvidenceCandidates("noise only"), []);
+
+  {
+    const candidates = parseTranscriptEvidenceCandidates("--- SYNTAX: .\\core\\evidenceGate.js ---\nPASS");
+
+    assert.strictEqual(candidates.length, 1);
+    assert.strictEqual(candidates[0].kind, "syntax");
+    assert.strictEqual(candidates[0].result, "pass");
+    assert.strictEqual(candidates[0].subject, "core/evidenceGate.js");
+    assert.strictEqual(candidates[0].data.source, "transcript");
+    assert.strictEqual(candidates[0].data.sectionLabel, "SYNTAX: .\\core\\evidenceGate.js");
+    assert.strictEqual(candidates[0].data.lineNumber, 2);
+    assert.strictEqual(candidates[0].data.matchedText, "PASS");
+  }
+
+  {
+    const candidates = parseTranscriptEvidenceCandidates("--- FULL TEST HARNESS ---\nAll Nodex tests passed");
+
+    assert.strictEqual(candidates.length, 1);
+    assert.strictEqual(candidates[0].kind, "test");
+    assert.strictEqual(candidates[0].result, "pass");
+    assert.strictEqual(candidates[0].subject, "tests/run.js");
+    assert(candidates[0].summary.includes("All Nodex tests passed"));
+  }
+
+  {
+    const candidates = parseTranscriptEvidenceCandidates('{"status":"success","value":1}');
+
+    assert.strictEqual(candidates.length, 1);
+    assert.strictEqual(candidates[0].kind, "targeted_command");
+    assert.strictEqual(candidates[0].result, "pass");
+    assert.strictEqual(candidates[0].data.status, "success");
+    assert.deepStrictEqual(candidates[0].data.parsed, { status: "success", value: 1 });
+  }
+
+  {
+    const candidates = parseTranscriptEvidenceCandidates("--- POST-COMMIT STATUS ---\n\n--- NEXT ---");
+
+    assert.strictEqual(candidates.length, 1);
+    assert.strictEqual(candidates[0].kind, "git");
+    assert.strictEqual(candidates[0].result, "info");
+    assert.strictEqual(candidates[0].data.status, "clean");
+    assert.strictEqual(candidates[0].data.sectionLabel, "POST-COMMIT STATUS");
+  }
+
+  {
+    const candidates = parseTranscriptEvidenceCandidates(" M .\\tests\\run.js\n?? core\\transcriptParser.js");
+
+    assert.strictEqual(candidates.length, 2);
+    assert.strictEqual(candidates[0].kind, "git");
+    assert.strictEqual(candidates[0].result, "info");
+    assert.strictEqual(candidates[0].data.status, "dirty");
+    assert.deepStrictEqual(candidates[0].data.paths, ["tests/run.js"]);
+    assert.deepStrictEqual(candidates[1].data.paths, ["core/transcriptParser.js"]);
+  }
+
+  {
+    const candidates = parseTranscriptEvidenceCandidates("[main c360a2d] Add deterministic evidence gate");
+
+    assert.strictEqual(candidates.length, 1);
+    assert.strictEqual(candidates[0].kind, "git");
+    assert.strictEqual(candidates[0].result, "info");
+    assert.strictEqual(candidates[0].data.gitCommit, "c360a2d");
+    assert.strictEqual(candidates[0].data.commitMessage, "Add deterministic evidence gate");
+  }
+
+  {
+    const candidates = parseTranscriptEvidenceCandidates("c360a2d (HEAD -> main) Add deterministic evidence gate");
+
+    assert.strictEqual(candidates.length, 1);
+    assert.strictEqual(candidates[0].kind, "git");
+    assert.strictEqual(candidates[0].result, "info");
+    assert.strictEqual(candidates[0].data.gitHead, "c360a2d");
+    assert.strictEqual(candidates[0].data.commitMessage, "Add deterministic evidence gate");
+  }
+
+  assert.deepStrictEqual(
+    parseTranscriptEvidenceCandidates("Syntax succeeded for core/evidenceGate.js"),
+    []
+  );
+
+  {
+    const candidates = parseTranscriptEvidenceCandidates(
+      "--- SYNTAX: ../core/evidenceGate.js ---\nPASS\nAll Nodex tests passed"
+    );
+
+    assert.strictEqual(candidates.length, 1);
+    assert.strictEqual(candidates[0].kind, "test");
+    assert.strictEqual(candidates[0].subject, "tests/run.js");
+  }
+
+  {
+    const transcript = "--- FULL TEST HARNESS ---\nAll Nodex tests passed";
+    const snapshot = transcript.slice();
+
+    parseTranscriptEvidenceCandidates(transcript);
+
+    assert.strictEqual(transcript, snapshot);
+  }
+}
+
 function testFallbackRouting() {
   assert.strictEqual(fallbackDecision("generate an image of a workstation").tool, "image");
   assert.strictEqual(fallbackDecision("make a video animation").tool, "video");
@@ -1972,6 +2080,7 @@ async function run() {
   testTaskGraphRuntime();
   testMemoryCapsuleRuntime();
   testEvidenceGateRuntime();
+  testTranscriptParserRuntime();
   testFallbackRouting();
   testPythonSandboxSafeExecution();
   testSandboxAllowsInternalOpen();

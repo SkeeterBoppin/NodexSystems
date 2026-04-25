@@ -42,6 +42,10 @@ const {
   createMemoryCapsule,
   validateMemoryCapsule
 } = require("../core/memoryCapsule");
+const {
+  createEvidenceGateRecord,
+  validateEvidenceGateRecord
+} = require("../core/evidenceGate");
 
 function assertApproximatelyEqual(actual, expected, tolerance = 1e-12) {
   assert(Math.abs(actual - expected) < tolerance, `expected ${actual} to be within ${tolerance} of ${expected}`);
@@ -1501,6 +1505,154 @@ function testMemoryCapsuleRuntime() {
   }
 }
 
+function buildEvidenceGateInput() {
+  return {
+    version: 1,
+    seamId: "memory_capsule_v1",
+    files: ["./core\\memoryCapsule.js", " .\\tests\\run.js "],
+    evidence: [
+      {
+        kind: "syntax",
+        subject: " .\\tests\\run.js ",
+        result: "pass",
+        summary: "node -c passed",
+        label: "syntax check",
+        data: {
+          command: "node -c .\\tests\\run.js"
+        }
+      }
+    ]
+  };
+}
+
+function testEvidenceGateRuntime() {
+  {
+    const input = buildEvidenceGateInput();
+    const record = createEvidenceGateRecord(input);
+
+    assert.strictEqual(validateEvidenceGateRecord(record), true);
+    assert.deepStrictEqual(record.files, ["core/memoryCapsule.js", "tests/run.js"]);
+    assert.strictEqual(record.evidence[0].subject, "tests/run.js");
+    assert.deepStrictEqual(input.files, ["./core\\memoryCapsule.js", " .\\tests\\run.js "]);
+    assert.strictEqual(input.evidence[0].subject, " .\\tests\\run.js ");
+  }
+
+  {
+    const input = buildEvidenceGateInput();
+    const snapshot = JSON.parse(JSON.stringify(input));
+    const record = createEvidenceGateRecord(input);
+
+    assert.deepStrictEqual(input, snapshot);
+    assert.notStrictEqual(record, input);
+    assert.notStrictEqual(record.files, input.files);
+    assert.notStrictEqual(record.evidence, input.evidence);
+    assert.notStrictEqual(record.evidence[0], input.evidence[0]);
+    assert.notStrictEqual(record.evidence[0].data, input.evidence[0].data);
+  }
+
+  {
+    const input = buildEvidenceGateInput();
+    input.seamId = "memory-capsule-v1";
+    assert.throws(() => createEvidenceGateRecord(input), /seamId/i);
+  }
+
+  {
+    const input = buildEvidenceGateInput();
+    input.files = [];
+    assert.throws(() => createEvidenceGateRecord(input), /files/i);
+  }
+
+  {
+    const input = buildEvidenceGateInput();
+    input.files = ["./core\\memoryCapsule.js", "core/memoryCapsule.js"];
+    assert.throws(() => createEvidenceGateRecord(input), /duplicate|files/i);
+  }
+
+  {
+    const input = buildEvidenceGateInput();
+    input.files = ["/core/memoryCapsule.js"];
+    assert.throws(() => createEvidenceGateRecord(input), /repo-relative|files/i);
+  }
+
+  {
+    const input = buildEvidenceGateInput();
+    input.files = ["\\\\server\\share\\memoryCapsule.js"];
+    assert.throws(() => createEvidenceGateRecord(input), /repo-relative|files/i);
+  }
+
+  {
+    const input = buildEvidenceGateInput();
+    input.files = ["../core/memoryCapsule.js"];
+    assert.throws(() => createEvidenceGateRecord(input), /files|\.\./i);
+  }
+
+  {
+    const input = buildEvidenceGateInput();
+    input.files = ["core/"];
+    assert.throws(() => createEvidenceGateRecord(input), /files|file path/i);
+  }
+
+  {
+    const input = buildEvidenceGateInput();
+    input.evidence = [];
+    assert.throws(() => createEvidenceGateRecord(input), /evidence/i);
+  }
+
+  {
+    const input = buildEvidenceGateInput();
+    input.evidence[0].kind = "deploy";
+    assert.throws(() => createEvidenceGateRecord(input), /kind/i);
+  }
+
+  {
+    const input = buildEvidenceGateInput();
+    input.evidence[0].kind = "git";
+    assert.throws(() => createEvidenceGateRecord(input), /kind/i);
+  }
+
+  {
+    const input = buildEvidenceGateInput();
+    input.evidence[0].result = "warn";
+    assert.throws(() => createEvidenceGateRecord(input), /result/i);
+  }
+
+  {
+    const input = buildEvidenceGateInput();
+    input.evidence[0].result = "info";
+    assert.strictEqual(validateEvidenceGateRecord(input), true);
+  }
+
+  {
+    const input = buildEvidenceGateInput();
+    input.evidence[0].subject = "core/evidenceGate.js";
+    assert.throws(() => createEvidenceGateRecord(input), /subject|claimed file/i);
+  }
+
+  {
+    const input = buildEvidenceGateInput();
+    input.evidence[0].subject = "../tests/run.js";
+    assert.throws(() => createEvidenceGateRecord(input), /subject|\.\./i);
+  }
+
+  {
+    const input = buildEvidenceGateInput();
+    input.evidence[0].summary = "   ";
+    assert.throws(() => createEvidenceGateRecord(input), /summary/i);
+  }
+
+  {
+    const input = buildEvidenceGateInput();
+    input.evidence[0].label = 1;
+    assert.throws(() => createEvidenceGateRecord(input), /label/i);
+  }
+
+  {
+    const input = buildEvidenceGateInput();
+    input.evidence[0].data = [];
+    assert.throws(() => createEvidenceGateRecord(input), /data/i);
+  }
+}
+
 function testFallbackRouting() {
   assert.strictEqual(fallbackDecision("generate an image of a workstation").tool, "image");
   assert.strictEqual(fallbackDecision("make a video animation").tool, "video");
@@ -1819,6 +1971,7 @@ async function run() {
   testDomainOntologyManifest();
   testTaskGraphRuntime();
   testMemoryCapsuleRuntime();
+  testEvidenceGateRuntime();
   testFallbackRouting();
   testPythonSandboxSafeExecution();
   testSandboxAllowsInternalOpen();

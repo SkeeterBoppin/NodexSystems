@@ -6055,3 +6055,111 @@ function testRuntimeDryRunExecutionPathNoRuntimeExports() {
   assert.strictEqual(summary.toolExecutionAllowed, false);
   assert.strictEqual(summary.agentHandoffRuntimeWiringAllowed, false);
 }
+
+/* EvidenceGateManifestImplementation v1 tests */
+(function runEvidenceGateManifestImplementationV1Tests() {
+  const assert = require("node:assert/strict");
+  const {
+    EVIDENCE_GATE_MANIFEST_STATUSES,
+    EVIDENCE_GATE_MANIFEST_REQUIRED_FIELDS,
+    createEvidenceGateManifest,
+    validateEvidenceGateManifest,
+    classifyEvidenceGateManifest,
+    assertEvidenceGateManifestNotAuthority,
+    summarizeEvidenceGateManifest,
+  } = require("../core/evidenceGateManifest.js");
+
+  function makeValidManifest(overrides = {}) {
+    return {
+      manifestId: "egm-test-001",
+      seam: "EvidenceGateManifestImplementation v1",
+      boundary: ["runtimeExecutionAllowed"],
+      requiredArtifacts: ["summary", "json"],
+      acceptedValidationCommands: ["node tests/run.js"],
+      acceptedOutputs: ["All Nodex tests passed"],
+      sourceCommit: "test-source-commit",
+      configVersion: "test-config-v1",
+      schemaVersion: "evidence-gate-manifest-v1",
+      freshnessLimit: "P1D",
+      producer: "local-producer",
+      verifier: "local-verifier",
+      artifactHashes: {
+        summary: "sha256:test-summary",
+        json: "sha256:test-json",
+      },
+      rejectionRules: [
+        "reject missing source commit",
+        "reject missing artifact hash",
+        "reject model-output authority claims",
+      ],
+      ...overrides,
+    };
+  }
+
+  function testEvidenceGateManifestValidation() {
+    const manifest = createEvidenceGateManifest(makeValidManifest());
+    const validation = validateEvidenceGateManifest(manifest);
+    assert.equal(validation.valid, true);
+    assert.equal(validation.status, EVIDENCE_GATE_MANIFEST_STATUSES.VALID);
+    assert.equal(EVIDENCE_GATE_MANIFEST_REQUIRED_FIELDS.length, 14);
+
+    const classification = classifyEvidenceGateManifest(manifest);
+    assert.equal(classification.valid, true);
+    assert.equal(classification.errorCount, 0);
+  }
+
+  function testEvidenceGateManifestRequiresProvenanceAndHashes() {
+    const missingSourceCommit = createEvidenceGateManifest(makeValidManifest({ sourceCommit: "" }));
+    assert.equal(validateEvidenceGateManifest(missingSourceCommit).valid, false);
+
+    const missingArtifactHashes = createEvidenceGateManifest(makeValidManifest({ artifactHashes: {} }));
+    assert.equal(validateEvidenceGateManifest(missingArtifactHashes).valid, false);
+
+    const sameProducerVerifier = createEvidenceGateManifest(makeValidManifest({ verifier: "local-producer" }));
+    assert.equal(validateEvidenceGateManifest(sameProducerVerifier).valid, false);
+  }
+
+  function testEvidenceGateManifestRejectsNarrativeExternalModelReplayAuthority() {
+    const modelAuthority = createEvidenceGateManifest(makeValidManifest({ modelOutputAuthorityAllowed: true }));
+    const validation = validateEvidenceGateManifest(modelAuthority);
+    assert.equal(validation.valid, false);
+    assert.equal(validation.authorityFields.includes("modelOutputAuthorityAllowed"), true);
+
+    const replayAuthority = createEvidenceGateManifest(makeValidManifest({ nested: { replayAuthorityAllowed: true } }));
+    assert.throws(() => assertEvidenceGateManifestNotAuthority(replayAuthority), /authority fields/);
+
+    const allowedNow = createEvidenceGateManifest(makeValidManifest({ allowed_now: "runtimeExecutionAllowed" }));
+    assert.equal(validateEvidenceGateManifest(allowedNow).valid, false);
+  }
+
+  function testEvidenceGateManifestPreservesBoundaryFalse() {
+    const manifest = createEvidenceGateManifest(makeValidManifest());
+    const summary = summarizeEvidenceGateManifest(manifest);
+    assert.equal(summary.runtimeExecutionAllowed, false);
+    assert.equal(summary.toolExecutionAllowed, false);
+    assert.equal(summary.runtimeFileWritesAllowed, false);
+    assert.equal(summary.processExecutionAllowed, false);
+    assert.equal(summary.gitExecutionAllowedByNodex, false);
+    assert.equal(summary.permissionGrantsAllowed, false);
+    assert.equal(summary.modelOutputAuthorityAllowed, false);
+    assert.equal(summary.replayAuthorityAllowed, false);
+  }
+
+  function testEvidenceGateManifestNoRuntimeExports() {
+    const manifestModule = require("../core/evidenceGateManifest.js");
+    const exportedKeys = Object.keys(manifestModule);
+    assert.equal(exportedKeys.includes("execute"), false);
+    assert.equal(exportedKeys.includes("run"), false);
+    assert.equal(exportedKeys.includes("grantAuthority"), false);
+    assert.equal(exportedKeys.includes("allowRuntimeExecution"), false);
+    assert.equal(exportedKeys.includes("wireAgentHandoffRunner"), false);
+  }
+
+  testEvidenceGateManifestValidation();
+  testEvidenceGateManifestRequiresProvenanceAndHashes();
+  testEvidenceGateManifestRejectsNarrativeExternalModelReplayAuthority();
+  testEvidenceGateManifestPreservesBoundaryFalse();
+  testEvidenceGateManifestNoRuntimeExports();
+
+  console.log("EvidenceGateManifestImplementation v1 tests passed");
+})();

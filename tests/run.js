@@ -6163,3 +6163,125 @@ function testRuntimeDryRunExecutionPathNoRuntimeExports() {
 
   console.log("EvidenceGateManifestImplementation v1 tests passed");
 })();
+
+/* ActivationStopConditionManifestImplementation v1 tests */
+(function runActivationStopConditionManifestImplementationV1Tests() {
+  const assert = require("node:assert/strict");
+  const {
+    ACTIVATION_STOP_CONDITION_MANIFEST_STATUSES,
+    ACTIVATION_STOP_CONDITION_CATEGORIES,
+    createActivationStopConditionManifest,
+    validateActivationStopConditionManifest,
+    classifyActivationStopConditionManifest,
+    assertActivationStopConditionManifestNotAuthority,
+    summarizeActivationStopConditionManifest,
+  } = require("../core/activationStopConditionManifest.js");
+
+  function numbered(prefix, count) {
+    return Array.from({ length: count }, (_, index) => `${prefix}-${index + 1}`);
+  }
+
+  function makeValidManifest(overrides = {}) {
+    return {
+      manifestId: "ascm-test-001",
+      sourceGap: "LGG-14",
+      sourceGateName: "ActivationStopConditionManifest",
+      boundaryCoverage: numbered("boundary", 12),
+      blockedBoundaryToggleStopConditions: numbered("blocked-boundary-toggle-stop", 6),
+      artifactStopConditions: numbered("artifact-stop", 6),
+      capabilityStopConditions: numbered("capability-stop", 7),
+      runtimeStopConditions: numbered("runtime-stop", 6),
+      requiredEvidence: ["evidence-manifest", "local-validator-output"],
+      sourceCommit: "test-source-commit",
+      schemaVersion: "activation-stop-condition-manifest-v1",
+      producer: "local-producer",
+      verifier: "local-verifier",
+      rejectionRules: ["reject activation authority", "reject runtime authority"],
+      ...overrides,
+    };
+  }
+
+  function testActivationStopConditionManifestValidation() {
+    const manifest = createActivationStopConditionManifest(makeValidManifest());
+    const validation = validateActivationStopConditionManifest(manifest);
+    assert.equal(validation.valid, true);
+    assert.equal(validation.status, ACTIVATION_STOP_CONDITION_MANIFEST_STATUSES.VALID);
+    assert.equal(validation.totalStopConditionCount, 25);
+
+    const classification = classifyActivationStopConditionManifest(manifest);
+    assert.equal(classification.valid, true);
+    assert.equal(classification.errorCount, 0);
+    assert.equal(ACTIVATION_STOP_CONDITION_CATEGORIES.RUNTIME, "runtimeStopConditions");
+  }
+
+  function testActivationStopConditionManifestRequiresBoundaryAndStopConditions() {
+    const insufficientBoundaryCoverage = createActivationStopConditionManifest(makeValidManifest({
+      boundaryCoverage: numbered("boundary", 11),
+    }));
+    assert.equal(validateActivationStopConditionManifest(insufficientBoundaryCoverage).valid, false);
+
+    const insufficientRuntimeStops = createActivationStopConditionManifest(makeValidManifest({
+      runtimeStopConditions: numbered("runtime-stop", 5),
+    }));
+    assert.equal(validateActivationStopConditionManifest(insufficientRuntimeStops).valid, false);
+
+    const sameProducerVerifier = createActivationStopConditionManifest(makeValidManifest({
+      verifier: "local-producer",
+    }));
+    assert.equal(validateActivationStopConditionManifest(sameProducerVerifier).valid, false);
+  }
+
+  function testActivationStopConditionManifestRejectsAuthorityFields() {
+    const activationAuthority = createActivationStopConditionManifest(makeValidManifest({
+      activationAllowed: true,
+    }));
+    const validation = validateActivationStopConditionManifest(activationAuthority);
+    assert.equal(validation.valid, false);
+    assert.equal(validation.authorityFields.includes("activationAllowed"), true);
+
+    const nestedRuntimeAuthority = createActivationStopConditionManifest(makeValidManifest({
+      nested: { runtimeExecutionAllowed: true },
+    }));
+    assert.throws(() => assertActivationStopConditionManifestNotAuthority(nestedRuntimeAuthority), /authority fields/);
+
+    const allowedNow = createActivationStopConditionManifest(makeValidManifest({
+      allowed_now: "runtimeExecutionAllowed",
+    }));
+    assert.equal(validateActivationStopConditionManifest(allowedNow).valid, false);
+  }
+
+  function testActivationStopConditionManifestPreservesBoundaryFalse() {
+    const manifest = createActivationStopConditionManifest(makeValidManifest());
+    const summary = summarizeActivationStopConditionManifest(manifest);
+    assert.equal(summary.activationAllowed, false);
+    assert.equal(summary.runtimeIntegrationAllowed, false);
+    assert.equal(summary.actualDryRunExecutionAllowed, false);
+    assert.equal(summary.runtimeExecutionAllowed, false);
+    assert.equal(summary.toolExecutionAllowed, false);
+    assert.equal(summary.runtimeFileWritesAllowed, false);
+    assert.equal(summary.processExecutionAllowed, false);
+    assert.equal(summary.gitExecutionAllowedByNodex, false);
+    assert.equal(summary.permissionGrantsAllowed, false);
+    assert.equal(summary.agentHandoffRuntimeWiringAllowed, false);
+    assert.equal(summary.modelOutputAuthorityAllowed, false);
+    assert.equal(summary.replayAuthorityAllowed, false);
+  }
+
+  function testActivationStopConditionManifestNoRuntimeExports() {
+    const manifestModule = require("../core/activationStopConditionManifest.js");
+    const exportedKeys = Object.keys(manifestModule);
+    assert.equal(exportedKeys.includes("execute"), false);
+    assert.equal(exportedKeys.includes("run"), false);
+    assert.equal(exportedKeys.includes("grantAuthority"), false);
+    assert.equal(exportedKeys.includes("approveActivation"), false);
+    assert.equal(exportedKeys.includes("allowRuntimeExecution"), false);
+  }
+
+  testActivationStopConditionManifestValidation();
+  testActivationStopConditionManifestRequiresBoundaryAndStopConditions();
+  testActivationStopConditionManifestRejectsAuthorityFields();
+  testActivationStopConditionManifestPreservesBoundaryFalse();
+  testActivationStopConditionManifestNoRuntimeExports();
+
+  console.log("ActivationStopConditionManifestImplementation v1 tests passed");
+})();

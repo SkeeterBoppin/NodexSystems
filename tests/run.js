@@ -1,5 +1,16 @@
 const assert = require("assert");
 const {
+  HANDOFF_RUNNER_ACTIONS,
+  HANDOFF_RUNNER_STATUSES,
+  HANDOFF_RUNNER_BLOCKED_REASONS,
+  createHandoffRunnerDecision,
+  validateHandoffRunnerDecision,
+  classifyHandoffPacketForRunner,
+  createAgentHandoffRunner,
+  assertHandoffRunnerDecisionSafe,
+  summarizeHandoffRunnerDecision
+} = require("../core/agentHandoffRunner");
+const {
   COMMIT_GATE_REQUIRED_STEPS,
   COMMIT_GATE_STATUSES,
   COMMIT_GATE_BLOCKING_REASONS,
@@ -3619,6 +3630,11 @@ async function run() {
   testCommitGateBlocksOnFailedStep();
   testCommitGatePassesOnlyWhenAllRequiredStepsPass();
   testCommitGateNoRuntimeGitExecution();
+  testAgentHandoffRunnerDecisionValidation();
+  testAgentHandoffRunnerRoutesMetadataOnly();
+  testAgentHandoffRunnerBlocksToolAndGitExecution();
+  testAgentHandoffRunnerRequiresGateSpine();
+  testAgentHandoffRunnerNoRuntimeExports();
   testContextExporterAuthorityRuntime();
   testFallbackRouting();
   testPythonSandboxSafeExecution();
@@ -4307,4 +4323,151 @@ function testCommitGateNoRuntimeGitExecution() {
   assert.strictEqual(evaluation.canCommit, false);
   assert.strictEqual(evaluation.canAutoFix, false);
   assert.strictEqual(evaluation.canUseModelOutputAsProof, false);
+}
+const HANDOFF_RUNNER_REQUIRED_GATES_TEST = [
+  "AgentHandoffPacket",
+  "AgentHandoffBridge",
+  "TaskGraph",
+  "EvidenceGate",
+  "ValidityGraph",
+  "ToolCapabilityRegistry",
+  "ReplayStore",
+  "CommitGate"
+];
+
+function makeHandoffRunnerDecision(overrides = {}) {
+  return {
+    decisionId: "handoff_runner_decision_test",
+    handoffId: "handoff_packet_test",
+    action: "plan",
+    status: "routed",
+    requiredGates: HANDOFF_RUNNER_REQUIRED_GATES_TEST,
+    blockedCapabilities: [],
+    blockedReasons: [],
+    canExecuteTools: false,
+    canWriteFiles: false,
+    canRunGit: false,
+    canCommit: false,
+    canGrantPermissions: false,
+    canUseModelOutputAsProof: false,
+    ...overrides
+  };
+}
+
+function testAgentHandoffRunnerDecisionValidation() {
+  assert.ok(HANDOFF_RUNNER_ACTIONS.includes("defer_runtime_execution"));
+  assert.ok(HANDOFF_RUNNER_STATUSES.includes("blocked"));
+  assert.ok(HANDOFF_RUNNER_BLOCKED_REASONS.includes("tool_execution_requested"));
+
+  const missing = validateHandoffRunnerDecision({});
+  assert.strictEqual(missing.valid, false);
+  assert.ok(missing.errors.some(error => error.includes("missing required field")));
+
+  const unknown = validateHandoffRunnerDecision(makeHandoffRunnerDecision({
+    action: "not_real",
+    status: "not_real",
+    blockedReasons: ["not_real"]
+  }));
+
+  assert.strictEqual(unknown.valid, false);
+  assert.ok(unknown.errors.some(error => error.includes("unknown handoff runner action")));
+  assert.ok(unknown.errors.some(error => error.includes("unknown handoff runner status")));
+  assert.ok(unknown.errors.some(error => error.includes("unknown blockedReason")));
+
+  const unsafe = validateHandoffRunnerDecision(makeHandoffRunnerDecision({
+    canExecuteTools: true
+  }));
+
+  assert.strictEqual(unsafe.valid, false);
+  assert.ok(unsafe.errors.some(error => error.includes("canExecuteTools must be false")));
+}
+
+function testAgentHandoffRunnerRoutesMetadataOnly() {
+  const runner = createAgentHandoffRunner();
+  const decision = runner.classify({
+    handoffId: "handoff_packet_metadata_only",
+    requestedAction: "plan",
+    payload: { goal: "plan only" }
+  }, {
+    decisionId: "metadata_only_decision"
+  });
+
+  assert.strictEqual(decision.action, "plan");
+  assert.strictEqual(decision.status, "routed");
+  assert.strictEqual(decision.canExecuteTools, false);
+  assert.strictEqual(decision.canWriteFiles, false);
+  assert.strictEqual(decision.canRunGit, false);
+  assert.strictEqual(decision.canCommit, false);
+  assert.strictEqual(decision.canGrantPermissions, false);
+  assert.strictEqual(decision.canUseModelOutputAsProof, false);
+  assert.strictEqual(assertHandoffRunnerDecisionSafe(decision), true);
+
+  const summary = summarizeHandoffRunnerDecision(decision);
+  assert.strictEqual(summary.safe, true);
+  assert.strictEqual(summary.requiredGateCount, HANDOFF_RUNNER_REQUIRED_GATES_TEST.length);
+}
+
+function testAgentHandoffRunnerBlocksToolAndGitExecution() {
+  const decision = classifyHandoffPacketForRunner({
+    handoffId: "unsafe_handoff_packet",
+    request: "executeTool writeFileTool git commit permission grant model output as proof runtime integration"
+  });
+
+  assert.strictEqual(decision.status, "blocked");
+  assert.strictEqual(decision.action, "defer_runtime_execution");
+  assert.ok(decision.blockedReasons.includes("tool_execution_requested"));
+  assert.ok(decision.blockedReasons.includes("file_write_requested"));
+  assert.ok(decision.blockedReasons.includes("git_execution_requested"));
+  assert.ok(decision.blockedReasons.includes("permission_grant_requested"));
+  assert.ok(decision.blockedReasons.includes("model_output_used_as_proof"));
+  assert.ok(decision.blockedReasons.includes("runtime_integration_requested"));
+  assert.strictEqual(decision.canExecuteTools, false);
+  assert.strictEqual(decision.canRunGit, false);
+  assert.strictEqual(assertHandoffRunnerDecisionSafe(decision), true);
+}
+
+function testAgentHandoffRunnerRequiresGateSpine() {
+  const missingGate = validateHandoffRunnerDecision(makeHandoffRunnerDecision({
+    requiredGates: HANDOFF_RUNNER_REQUIRED_GATES_TEST.filter(gate => gate !== "CommitGate")
+  }));
+
+  assert.strictEqual(missingGate.valid, false);
+  assert.ok(missingGate.errors.some(error => error.includes("missing required gate: CommitGate")));
+
+  assert.throws(
+    () => createAgentHandoffRunner({
+      requiredGates: HANDOFF_RUNNER_REQUIRED_GATES_TEST.filter(gate => gate !== "EvidenceGate")
+    }),
+    /missing required gate/
+  );
+
+  const created = createHandoffRunnerDecision(makeHandoffRunnerDecision());
+  assert.strictEqual(created.requiredGates.length, HANDOFF_RUNNER_REQUIRED_GATES_TEST.length);
+}
+
+function testAgentHandoffRunnerNoRuntimeExports() {
+  const moduleExports = require("../core/agentHandoffRunner");
+
+  for (const forbidden of [
+    "executeTool",
+    "runTool",
+    "writeFile",
+    "runGit",
+    "gitCommit",
+    "commit",
+    "grantPermission",
+    "executeCommand"
+  ]) {
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(moduleExports, forbidden), false);
+  }
+
+  const decision = makeHandoffRunnerDecision();
+  const summary = summarizeHandoffRunnerDecision(decision);
+
+  assert.strictEqual(summary.canExecuteTools, false);
+  assert.strictEqual(summary.canWriteFiles, false);
+  assert.strictEqual(summary.canRunGit, false);
+  assert.strictEqual(summary.canCommit, false);
+  assert.strictEqual(summary.canGrantPermissions, false);
+  assert.strictEqual(summary.canUseModelOutputAsProof, false);
 }

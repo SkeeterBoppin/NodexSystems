@@ -1,5 +1,19 @@
 const assert = require("assert");
 const {
+  TOOL_CAPABILITY_POLICIES,
+  CAPABILITY_CLASSES,
+  SIDE_EFFECT_LEVELS,
+  DEFAULT_POLICIES,
+  createToolCapabilityPolicy,
+  validateToolCapabilityPolicy,
+  createToolCapabilityRegistry,
+  getToolCapabilityPolicy,
+  classifyToolCapability,
+  canUseToolCapability,
+  assertToolCapabilityAllowed,
+  summarizeToolCapabilityRisk
+} = require("../core/toolCapabilityRegistry");
+const {
   INPUT_RISK_FLAGS,
   ALLOWED_NEXT_ACTIONS,
   BLOCKED_ACTIONS,
@@ -3568,6 +3582,11 @@ async function run() {
   testInputPatternWeigherScopeExpansion();
   testInputPatternWeigherWeakContextSource();
   testInputPatternWeigherNoUserPatternTracking();
+  testToolCapabilityRegistryPolicyValidation();
+  testToolCapabilityRegistryHighRiskDenyByDefault();
+  testToolCapabilityRegistryReadScope();
+  testToolCapabilityRegistryRuntimeIntegrationBlocked();
+  testToolCapabilityRegistryNoToolExecution();
   testContextExporterAuthorityRuntime();
   testFallbackRouting();
   testPythonSandboxSafeExecution();
@@ -3883,4 +3902,107 @@ function testInputPatternWeigherNoUserPatternTracking() {
   const moduleExports = require("../core/inputPatternWeigher");
   assert.strictEqual(Object.prototype.hasOwnProperty.call(moduleExports, "UserPatternGraph"), false);
   assert.strictEqual(Object.prototype.hasOwnProperty.call(moduleExports, "HumanContextState"), false);
+}
+function testToolCapabilityRegistryPolicyValidation() {
+  assert.strictEqual(TOOL_CAPABILITY_POLICIES.length, 11);
+  assert.ok(CAPABILITY_CLASSES.includes("write_file"));
+  assert.ok(SIDE_EFFECT_LEVELS.includes("process_execution"));
+  assert.ok(DEFAULT_POLICIES.includes("deny_by_default"));
+
+  const missing = validateToolCapabilityPolicy({});
+  assert.strictEqual(missing.valid, false);
+  assert.ok(missing.errors.some(error => error.includes("missing required field")));
+
+  const invalid = validateToolCapabilityPolicy({
+    ...TOOL_CAPABILITY_POLICIES[0],
+    capabilityClass: "not_real",
+    sideEffectLevel: "not_real",
+    defaultPolicy: "not_real"
+  });
+
+  assert.strictEqual(invalid.valid, false);
+  assert.ok(invalid.errors.some(error => error.includes("unknown capabilityClass")));
+  assert.ok(invalid.errors.some(error => error.includes("unknown sideEffectLevel")));
+  assert.ok(invalid.errors.some(error => error.includes("unknown defaultPolicy")));
+
+  const runtimeAllowed = validateToolCapabilityPolicy({
+    ...TOOL_CAPABILITY_POLICIES[0],
+    runtimeIntegrationAllowed: true
+  });
+
+  assert.strictEqual(runtimeAllowed.valid, false);
+  assert.ok(runtimeAllowed.errors.some(error => error.includes("runtimeIntegrationAllowed must be false")));
+}
+
+function testToolCapabilityRegistryHighRiskDenyByDefault() {
+  const registry = createToolCapabilityRegistry();
+
+  for (const toolPath of [
+    "tools/writeFileTool.js",
+    "tools/commandTool.js",
+    "tools/pythonTool.js"
+  ]) {
+    const policy = getToolCapabilityPolicy(registry, toolPath);
+    assert.ok(policy);
+    assert.strictEqual(policy.defaultPolicy, "deny_by_default");
+    assert.strictEqual(policy.requiresHumanApproval, true);
+    assert.strictEqual(policy.requiresEvidenceGate, true);
+    assert.strictEqual(policy.runtimeIntegrationAllowed, false);
+
+    const classification = classifyToolCapability(policy);
+    assert.strictEqual(classification.highRisk, true);
+    assert.strictEqual(classification.canExecuteRuntime, false);
+    assert.strictEqual(classification.canServeAsAuthority, false);
+    assert.strictEqual(canUseToolCapability(policy, "runtime_use"), false);
+    assert.throws(
+      () => assertToolCapabilityAllowed(policy, "runtime_use"),
+      /denied by registry policy/
+    );
+  }
+}
+
+function testToolCapabilityRegistryReadScope() {
+  const registry = createToolCapabilityRegistry();
+  const readPolicy = getToolCapabilityPolicy(registry, "tools/readFileTool.js");
+
+  assert.ok(readPolicy);
+  assert.strictEqual(readPolicy.capabilityClass, "read_file");
+  assert.strictEqual(readPolicy.sideEffectLevel, "filesystem_read");
+  assert.strictEqual(readPolicy.defaultPolicy, "allow_only_with_scope");
+  assert.ok(readPolicy.allowedRoots.includes("repo"));
+  assert.strictEqual(readPolicy.runtimeIntegrationAllowed, false);
+  assert.strictEqual(canUseToolCapability(readPolicy, "metadata_inspection"), true);
+  assert.strictEqual(canUseToolCapability(readPolicy, "scoped_read"), false);
+}
+
+function testToolCapabilityRegistryRuntimeIntegrationBlocked() {
+  const registry = createToolCapabilityRegistry();
+  const summary = summarizeToolCapabilityRisk(registry);
+
+  assert.strictEqual(summary.totalPolicies, 11);
+  assert.strictEqual(summary.highRiskPolicies, 3);
+  assert.strictEqual(summary.runtimeAllowedPolicies, 0);
+  assert.strictEqual(summary.metadataOnly, true);
+  assert.strictEqual(summary.runtimeIntegrationAllowed, false);
+
+  for (const policy of registry.policies) {
+    assert.strictEqual(policy.runtimeIntegrationAllowed, false);
+    assert.strictEqual(canUseToolCapability(policy, "runtime_use"), false);
+  }
+}
+
+function testToolCapabilityRegistryNoToolExecution() {
+  const moduleExports = require("../core/toolCapabilityRegistry");
+
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(moduleExports, "executeTool"), false);
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(moduleExports, "runTool"), false);
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(moduleExports, "routeTool"), false);
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(moduleExports, "grantToolPermission"), false);
+
+  const registry = createToolCapabilityRegistry();
+  const commandPolicy = getToolCapabilityPolicy(registry, "tools/commandTool.js");
+
+  assert.ok(commandPolicy);
+  assert.strictEqual(canUseToolCapability(commandPolicy, "metadata_inspection"), true);
+  assert.strictEqual(canUseToolCapability(commandPolicy, "runtime_use"), false);
 }

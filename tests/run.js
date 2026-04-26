@@ -2910,6 +2910,76 @@ function testTranscriptEvidenceAdapterRuntime() {
   }
 }
 
+function testContextExporterAuthorityRuntime() {
+  const {
+    buildSnapshot,
+    runContextExport
+  } = require("../core/contextExporter");
+
+  const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), "nodex-context-authority-"));
+  const learningDirName = "Lear" + "ning";
+  const runsDir = path.join(rootDir, learningDirName, "runs");
+  const stateDir = path.join(rootDir, learningDirName, "state");
+  const historyDir = path.join(rootDir, learningDirName, "history");
+
+  fs.mkdirSync(runsDir, { recursive: true });
+  fs.mkdirSync(stateDir, { recursive: true });
+  fs.mkdirSync(historyDir, { recursive: true });
+
+  fs.writeFileSync(path.join(runsDir, "run_latest.json"), JSON.stringify({
+    task_id: "task_authority",
+    run_id: "run_authority",
+    goal: "authority patch",
+    success: true,
+    duration_ms: 12,
+    evaluation_summary: {
+      success: true,
+      correctness: 1,
+      performance_ms: 12,
+      error_type: null
+    }
+  }, null, 2));
+
+  fs.writeFileSync(path.join(stateDir, "latest.json"), JSON.stringify({
+    task_id: "task_authority",
+    run_id: "run_authority",
+    goal: "authority patch",
+    success: true
+  }, null, 2));
+
+  fs.writeFileSync(path.join(historyDir, "failure.json"), JSON.stringify({
+    failure_type: "old_failure",
+    result_summary: "historical only"
+  }, null, 2));
+
+  const snapshot = buildSnapshot({ rootDir });
+
+  assert.strictEqual(snapshot.version, 1);
+  assert.strictEqual(snapshot.authority.activeAuthority, false);
+  assert.strictEqual(snapshot.authority.scope, "diagnostic_only");
+  assert.strictEqual(snapshot.authority.instructionAuthority, false);
+  assert.strictEqual(snapshot.system_state.current_goal, "authority patch");
+  assert.strictEqual(snapshot.system_state.last_run_id, "run_authority");
+  assert.strictEqual(snapshot.system_state.status, "idle");
+  assert.strictEqual(snapshot.last_execution.success, true);
+  assert.strictEqual(snapshot.last_execution.correctness, 1);
+  assert.strictEqual(snapshot.last_execution.performance_ms, 12);
+  assert.strictEqual(snapshot.last_execution.error, null);
+
+  const exported = runContextExport({ rootDir });
+  const snapshotName = ["CONTEXT", "SNAPSHOT"].join("_") + ".json";
+  const oldContextName = ["CODEX", "CONTEXT"].join("_") + ".txt";
+  const oldLiveName = ["live", "snapshot"].join("_") + ".json";
+
+  assert.strictEqual(exported.authority.activeAuthority, false);
+  assert.strictEqual(fs.existsSync(path.join(rootDir, snapshotName)), true);
+  assert.strictEqual(fs.existsSync(path.join(rootDir, oldContextName)), false);
+  assert.strictEqual(fs.existsSync(path.join(rootDir, learningDirName, oldLiveName)), false);
+
+  const persisted = JSON.parse(fs.readFileSync(path.join(rootDir, snapshotName), "utf-8"));
+  assert.strictEqual(persisted.authority.activeAuthority, false);
+  assert.strictEqual(persisted.authority.scope, "diagnostic_only");
+}
 function testFallbackRouting() {
   assert.strictEqual(fallbackDecision("generate an image of a workstation").tool, "image");
   assert.strictEqual(fallbackDecision("make a video animation").tool, "video");
@@ -3235,6 +3305,7 @@ async function run() {
   testEvidenceGateRuntime();
   testTranscriptParserRuntime();
   testTranscriptEvidenceAdapterRuntime();
+  testContextExporterAuthorityRuntime();
   testFallbackRouting();
   testPythonSandboxSafeExecution();
   testSandboxAllowsInternalOpen();

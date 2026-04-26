@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "type": "quarantine_ledger_record",
+  "generatedAt": "2026-04-26T03:10:46.490Z",
+  "boundary": "generated runtime artifact quarantine stabilized",
+  "deletionAllowed": false,
+  "rollbackAvailable": true,
+  "quarantineStable": true,
+  "nextAllowedSeam": "ContextLedgerRecord v1",
+  "evidence": {
+    "quarantineExecute": "C:\\Users\\Zak\\OneDrive\\Desktop\\Nodex Evidence\\generated_runtime_artifact_quarantine_execute_v1_20260425_200539.json",
+    "postQuarantineReferenceProof": "C:\\Users\\Zak\\OneDrive\\Desktop\\Nodex Evidence\\post_quarantine_reference_proof_v1_20260425_200814.json",
+    "postQuarantineReadinessGate": "C:\\Users\\Zak\\OneDrive\\Desktop\\Nodex Evidence\\post_quarantine_readiness_gate_v1_20260425_200937.json"
+  },
+  "head": [
+    "7ef9a4c Deauthorize stale debug generation artifact reference",
+    "M\tskills/debug_generation.skill.md",
+    "M\ttests/run.js"
+  ],
+  "quarantineRoot": "C:\\Users\\Zak\\OneDrive\\Desktop\\Nodex Evidence\\Quarantine\\generated_runtime_artifacts_20260425_200216",
+  "counts": {
+    "movedRecords": 137,
+    "validMoveProofRecords": 137,
+    "invalidMoveProofRecords": 0,
+    "sourceFilesStillPresent": 0,
+    "destinationFilesPresent": 137,
+    "referencesAfterQuarantine": 101,
+    "learningReferencesAfterQuarantine": 92,
+    "sandboxReferencesAfterQuarantine": 7,
+    "contextArtifactReferencesAfterQuarantine": 1,
+    "activeLearningStateReferences": 2,
+    "staleRefTotal": 0
+  },
+  "rules": [
+    "Quarantined files must not be deleted in this phase.",
+    "Rollback remains available through execute movedRecords.",
+    "Further cleanup requires a separate deletion/prune gate.",
+    "Remaining Learning/Sandbox references are active/source/diagnostic contracts, not generated-runtime deletion permission."
+  ]
+}

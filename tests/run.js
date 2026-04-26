@@ -6285,3 +6285,124 @@ function testRuntimeDryRunExecutionPathNoRuntimeExports() {
 
   console.log("ActivationStopConditionManifestImplementation v1 tests passed");
 })();
+
+/* ValidityGraphDependencyImplementation v1 tests */
+(function runValidityGraphDependencyImplementationV1Tests() {
+  const assert = require("node:assert/strict");
+  const {
+    VALIDITY_GRAPH_DEPENDENCY_STATUSES,
+    VALIDITY_GRAPH_DEPENDENCY_NODE_TYPES,
+    createValidityGraphDependencyManifest,
+    validateValidityGraphDependencyManifest,
+    classifyValidityGraphDependencyManifest,
+    assertValidityGraphDependencyManifestNotAuthority,
+    summarizeValidityGraphDependencyManifest,
+  } = require("../core/validityGraphDependencyManifest.js");
+
+  function numbered(prefix, count) {
+    return Array.from({ length: count }, (_, index) => `${prefix}-${index + 1}`);
+  }
+
+  function makeValidManifest(overrides = {}) {
+    return {
+      manifestId: "vgdm-test-001",
+      sourceGap: "LGG-11",
+      sourceGateName: "ValidityGraphCompleteDependencyEdges",
+      boundaryNodes: numbered("boundary", 12),
+      componentNodes: numbered("component", 17),
+      evidenceNodes: numbered("evidence", 6),
+      dependencyEdges: numbered("edge", 18),
+      monotonicityRules: numbered("monotonicity", 10),
+      impossibleStates: numbered("impossible", 8),
+      edgeExplanations: numbered("explanation", 6),
+      sourceCommit: "test-source-commit",
+      schemaVersion: "validity-graph-dependency-manifest-v1",
+      producer: "local-producer",
+      verifier: "local-verifier",
+      ...overrides,
+    };
+  }
+
+  function testValidityGraphDependencyManifestValidation() {
+    const manifest = createValidityGraphDependencyManifest(makeValidManifest());
+    const validation = validateValidityGraphDependencyManifest(manifest);
+    assert.equal(validation.valid, true);
+    assert.equal(validation.status, VALIDITY_GRAPH_DEPENDENCY_STATUSES.VALID);
+
+    const classification = classifyValidityGraphDependencyManifest(manifest);
+    assert.equal(classification.valid, true);
+    assert.equal(classification.errorCount, 0);
+    assert.equal(VALIDITY_GRAPH_DEPENDENCY_NODE_TYPES.BOUNDARY, "boundary");
+  }
+
+  function testValidityGraphDependencyRequiresNodesEdgesAndRules() {
+    const insufficientBoundaryNodes = createValidityGraphDependencyManifest(makeValidManifest({
+      boundaryNodes: numbered("boundary", 11),
+    }));
+    assert.equal(validateValidityGraphDependencyManifest(insufficientBoundaryNodes).valid, false);
+
+    const insufficientComponents = createValidityGraphDependencyManifest(makeValidManifest({
+      componentNodes: numbered("component", 16),
+    }));
+    assert.equal(validateValidityGraphDependencyManifest(insufficientComponents).valid, false);
+
+    const sameProducerVerifier = createValidityGraphDependencyManifest(makeValidManifest({
+      verifier: "local-producer",
+    }));
+    assert.equal(validateValidityGraphDependencyManifest(sameProducerVerifier).valid, false);
+  }
+
+  function testValidityGraphDependencyRejectsAuthorityFields() {
+    const runtimeAuthority = createValidityGraphDependencyManifest(makeValidManifest({
+      runtimeExecutionAllowed: true,
+    }));
+    const validation = validateValidityGraphDependencyManifest(runtimeAuthority);
+    assert.equal(validation.valid, false);
+    assert.equal(validation.authorityFields.includes("runtimeExecutionAllowed"), true);
+
+    const nestedReplayAuthority = createValidityGraphDependencyManifest(makeValidManifest({
+      nested: { replayAuthorityAllowed: true },
+    }));
+    assert.throws(() => assertValidityGraphDependencyManifestNotAuthority(nestedReplayAuthority), /authority fields/);
+
+    const allowedNow = createValidityGraphDependencyManifest(makeValidManifest({
+      allowed_now: "toolExecutionAllowed",
+    }));
+    assert.equal(validateValidityGraphDependencyManifest(allowedNow).valid, false);
+  }
+
+  function testValidityGraphDependencyPreservesBoundaryFalse() {
+    const manifest = createValidityGraphDependencyManifest(makeValidManifest());
+    const summary = summarizeValidityGraphDependencyManifest(manifest);
+    assert.equal(summary.activationAllowed, false);
+    assert.equal(summary.runtimeIntegrationAllowed, false);
+    assert.equal(summary.actualDryRunExecutionAllowed, false);
+    assert.equal(summary.runtimeExecutionAllowed, false);
+    assert.equal(summary.toolExecutionAllowed, false);
+    assert.equal(summary.runtimeFileWritesAllowed, false);
+    assert.equal(summary.processExecutionAllowed, false);
+    assert.equal(summary.gitExecutionAllowedByNodex, false);
+    assert.equal(summary.permissionGrantsAllowed, false);
+    assert.equal(summary.agentHandoffRuntimeWiringAllowed, false);
+    assert.equal(summary.modelOutputAuthorityAllowed, false);
+    assert.equal(summary.replayAuthorityAllowed, false);
+  }
+
+  function testValidityGraphDependencyNoRuntimeExports() {
+    const manifestModule = require("../core/validityGraphDependencyManifest.js");
+    const exportedKeys = Object.keys(manifestModule);
+    assert.equal(exportedKeys.includes("execute"), false);
+    assert.equal(exportedKeys.includes("run"), false);
+    assert.equal(exportedKeys.includes("grantAuthority"), false);
+    assert.equal(exportedKeys.includes("approveActivation"), false);
+    assert.equal(exportedKeys.includes("allowRuntimeExecution"), false);
+  }
+
+  testValidityGraphDependencyManifestValidation();
+  testValidityGraphDependencyRequiresNodesEdgesAndRules();
+  testValidityGraphDependencyRejectsAuthorityFields();
+  testValidityGraphDependencyPreservesBoundaryFalse();
+  testValidityGraphDependencyNoRuntimeExports();
+
+  console.log("ValidityGraphDependencyImplementation v1 tests passed");
+})();

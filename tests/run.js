@@ -3195,6 +3195,19 @@ function testAdaptiveExplorationAndPublishConfidence() {
   assert.strictEqual(confidence.threshold, 31);
 }
 
+
+function testLegacyPromptMemoryReadsDeauthorized() {
+  const source = fs.readFileSync(path.join(__dirname, "..", "evolution", "evolver.js"), "utf-8");
+  const staleRuntimeState = ["memory", ["CURRENT", "STATE"].join("_") + ".json"].join("/");
+  const missingFailureState = ["memory", ["FAILURES"].join("") + ".json"].join("/");
+  const legacyLongTerm = ["memory", ["long", "term"].join("_") + ".json"].join("/");
+
+  assert.strictEqual(source.includes(staleRuntimeState), false);
+  assert.strictEqual(source.includes(missingFailureState), false);
+  assert.strictEqual(source.includes(legacyLongTerm), false);
+  assert.strictEqual(source.includes("SYSTEM_RULES"), true);
+}
+
 function testEvolutionCandidateWorkspaceLocation() {
   const probe = "strict_loader_reference_patch_probe";
   const root = candidateRoot(probe);
@@ -3341,6 +3354,7 @@ async function run() {
   testStrategyPerformanceAndSelection();
   testStructuralPatternExtractionAndCandidates();
   testAdaptiveExplorationAndPublishConfidence();
+  testLegacyPromptMemoryReadsDeauthorized();
   testEvolutionCandidateWorkspaceLocation();
   testBestCandidateSelection();
 

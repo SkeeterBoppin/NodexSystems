@@ -2,7 +2,7 @@ const { randomUUID } = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
-const { readText, appendText, writeText, readJson, readMemoryText, ROOT_DIR } = require("../memory/memoryStore");
+const { readText, appendText, writeText, readMemoryText, ROOT_DIR } = require("../memory/memoryStore");
 const { generate } = require("../llm/ollamaClient");
 const { buildEvolutionPrompt } = require("./promptBuilder");
 const { cleanEvolutionOutput, validateEvolution } = require("./validators");
@@ -63,8 +63,8 @@ async function getEvolution({
   attempt = 1
 }) {
   const rules = readMemoryText("SYSTEM_RULES.md", readMemoryText("SYSTEM_RULES.MD", ""));
-  const currentState = readText("memory/CURRENT_STATE.json", "");
-  const failures = readText("memory/FAILURES.json", "[]");
+  const currentState = "";
+  const failures = "[]";
 
   const prompt = buildEvolutionPrompt({
     rules,
@@ -343,7 +343,6 @@ async function runEvolution({ maxAttempts = 999, successThreshold = 25, parallel
   console.log("EVOLVE SCRIPT STARTED");
 
   readText("CONTEXT.md", "");
-  readJson("memory/long_term.json", []);
 
   try {
     let attempts = 0;

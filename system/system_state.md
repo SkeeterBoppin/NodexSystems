@@ -2,20 +2,20 @@
 
 ## SYSTEM IDENTITY
 
-Name: Nodex System  
-Type: Deterministic AI Execution Engine  
-Architecture: Modular, Tool-Routed, Evaluation-Driven  
+Name: Nodex System
+Type: Deterministic AI Execution Engine
+Architecture: Modular, Tool-Routed, Evaluation-Driven
 Role: Generate → Execute → Evaluate → Improve (closed loop)
 
-Human Role: Orchestrator (Zak)  
-AI Role: Constrained Execution + System Evolution  
+Human Role: Orchestrator (Zak)
+AI Role: Constrained Execution + System Evolution
 
 ---
 
 ## CURRENT PHASE
 
-PHASE: 1 — CORE LOOP STABILIZATION  
-STATUS: FUNCTIONAL BUT VALIDATION-BLOCKED  
+PHASE: 1 — CORE LOOP STABILIZATION
+STATUS: FUNCTIONAL BUT VALIDATION-BLOCKED
 
 ---
 

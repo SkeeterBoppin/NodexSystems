@@ -1,5 +1,15 @@
 const assert = require("assert");
 const {
+  PATTERN_TYPES,
+  createPatternObservation,
+  validatePatternObservation,
+  createContextPatternGraph,
+  getPatternObservation,
+  classifyPatternObservation,
+  canPatternAffectRouting,
+  assertPatternNotProof
+} = require("../core/contextPatternGraph");
+const {
   CONTEXT_USE_SURFACES,
   createContextSurface,
   validateContextSurface,
@@ -3537,6 +3547,11 @@ async function run() {
   testContextUseGraphMemoryCannotProve();
   testContextUseGraphGeneratedArtifactsDeauthorized();
   testContextUseGraphModelOutputProposalOnly();
+  testContextPatternGraphObservationValidation();
+  testContextPatternGraphRoutingHypothesisOnly();
+  testContextPatternGraphPatternTypes();
+  testContextPatternGraphNoUserPatternImplementation();
+  testContextPatternGraphContextUseDependency();
   testContextExporterAuthorityRuntime();
   testFallbackRouting();
   testPythonSandboxSafeExecution();
@@ -3631,4 +3646,91 @@ function testContextUseGraphModelOutputProposalOnly() {
   assert.strictEqual(canUseContextFor(evolution, "candidate_generation"), true);
   assert.strictEqual(canUseContextFor(evolution, "direct_context_promotion"), false);
   assert.strictEqual(canUseContextFor(evolution, "proof"), false);
+}
+function makePatternObservation(overrides = {}) {
+  return {
+    patternId: "pattern_scope_001",
+    patternType: "scope_expansion_during_active_seam",
+    sourceKind: "git_state",
+    observedSurface: "working_tree_dirty",
+    matchedSignals: ["dirty_state", "new_feature_request"],
+    confidence: 0.8,
+    effect: "route_to_current_boundary_closure",
+    blockedUses: ["proof", "autonomous_authority", "semantic_truth"],
+    requiredValidation: "ContextUseGraph",
+    status: "hypothesis",
+    ...overrides
+  };
+}
+
+function testContextPatternGraphObservationValidation() {
+  const missing = validatePatternObservation({});
+  assert.strictEqual(missing.valid, false);
+  assert.ok(missing.errors.some(error => error.includes("missing required field")));
+
+  const invalidConfidence = validatePatternObservation(makePatternObservation({ confidence: 2 }));
+  assert.strictEqual(invalidConfidence.valid, false);
+  assert.ok(invalidConfidence.errors.some(error => error.includes("between 0 and 1")));
+
+  const missingBlocked = validatePatternObservation(makePatternObservation({ blockedUses: ["proof"] }));
+  assert.strictEqual(missingBlocked.valid, false);
+  assert.ok(missingBlocked.errors.some(error => error.includes("autonomous_authority")));
+
+  const truthField = validatePatternObservation(makePatternObservation({ semanticTruth: true }));
+  assert.strictEqual(truthField.valid, false);
+  assert.ok(truthField.errors.some(error => error.includes("semantic truth")));
+}
+
+function testContextPatternGraphRoutingHypothesisOnly() {
+  const observation = createPatternObservation(makePatternObservation());
+  const classification = classifyPatternObservation(observation);
+
+  assert.strictEqual(classification.canAffectRouting, true);
+  assert.strictEqual(classification.canServeAsProof, false);
+  assert.strictEqual(classification.canDecideSemanticTruth, false);
+  assert.strictEqual(classification.canActAutonomously, false);
+  assert.strictEqual(canPatternAffectRouting(observation), true);
+  assert.strictEqual(assertPatternNotProof(observation), true);
+
+  const rejected = createPatternObservation(makePatternObservation({ patternId: "pattern_rejected_001", status: "rejected" }));
+  assert.strictEqual(canPatternAffectRouting(rejected), false);
+}
+
+function testContextPatternGraphPatternTypes() {
+  assert.strictEqual(PATTERN_TYPES.length, 5);
+  assert.ok(PATTERN_TYPES.includes("scope_expansion_during_active_seam"));
+  assert.ok(PATTERN_TYPES.includes("authority_leak_recurrence"));
+  assert.ok(PATTERN_TYPES.includes("formatting_drift_recurrence"));
+  assert.ok(PATTERN_TYPES.includes("weak_context_source_dependency"));
+  assert.ok(PATTERN_TYPES.includes("validated_safe_seam_shape"));
+}
+
+function testContextPatternGraphNoUserPatternImplementation() {
+  const userPattern = validatePatternObservation(makePatternObservation({
+    userPattern: true
+  }));
+
+  assert.strictEqual(userPattern.valid, false);
+  assert.ok(userPattern.errors.some(error => error.includes("user-pattern")));
+
+  const moduleExports = require("../core/contextPatternGraph");
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(moduleExports, "UserPatternGraph"), false);
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(moduleExports, "HumanContextState"), false);
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(moduleExports, "InputPatternWeigher"), false);
+}
+
+function testContextPatternGraphContextUseDependency() {
+  const { createContextUseGraph, getContextSurface, canUseContextFor } = require("../core/contextUseGraph");
+  const contextUseGraph = createContextUseGraph();
+  const observation = makePatternObservation();
+
+  const graph = createContextPatternGraph([observation], { contextUseGraph });
+  const stored = getPatternObservation(graph, "pattern_scope_001");
+
+  assert.ok(stored);
+  assert.strictEqual(graph.contextUseGraph.surfaces.length, 25);
+
+  const agents = getContextSurface(graph.contextUseGraph, "AGENTS.md");
+  assert.strictEqual(canUseContextFor(agents, "routing_constraint"), true);
+  assert.strictEqual(canUseContextFor(agents, "proof"), false);
 }

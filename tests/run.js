@@ -1,5 +1,14 @@
 const assert = require("assert");
 const {
+  RUNTIME_INTEGRATION_DRY_RUN_PATH_STATUSES,
+  RUNTIME_INTEGRATION_DRY_RUN_PATH_BLOCKED_REASONS,
+  createRuntimeIntegrationDryRunPath,
+  validateRuntimeIntegrationDryRunPath,
+  classifyRuntimeIntegrationDryRunPath,
+  assertRuntimeIntegrationDryRunPathNotExecutable,
+  summarizeRuntimeIntegrationDryRunPath
+} = require("../core/runtimeIntegrationPlanExecutorDryRunPath");
+const {
   RUNTIME_USER_APPROVAL_SCOPES,
   RUNTIME_USER_APPROVAL_STATES,
   RUNTIME_USER_APPROVAL_DECISIONS,
@@ -5742,5 +5751,151 @@ function testRuntimeUserApprovalNoRuntimeExports() {
   testRuntimeIntegrationPlanBlocksExecution();
   testRuntimeIntegrationPlanBlocksAgentHandoffRuntimeWiring();
   testRuntimeIntegrationPlanNoRuntimeExports();
+  testRuntimeIntegrationDryRunPathValidation();
+  testRuntimeIntegrationDryRunPathRequiresPlanExecutorAndDryRunContract();
+  testRuntimeIntegrationDryRunPathBlocksExecution();
+  testRuntimeIntegrationDryRunPathBlocksAgentHandoffRuntimeWiring();
+  testRuntimeIntegrationDryRunPathNoRuntimeExports();
 })();
 // === RuntimeIntegrationPlanExecutorImplementation v1 tests END ===
+
+function testRuntimeIntegrationDryRunPathValidation() {
+  assert.strictEqual(RUNTIME_INTEGRATION_DRY_RUN_PATH_STATUSES.VALID_METADATA_ONLY, "valid_metadata_only");
+  assert.strictEqual(
+    RUNTIME_INTEGRATION_DRY_RUN_PATH_BLOCKED_REASONS.ACTUAL_DRY_RUN_EXECUTION_BLOCKED,
+    "actual_dry_run_execution_blocked"
+  );
+
+  const record = createRuntimeIntegrationDryRunPath({
+    pathId: "dry_run_path_validation_test",
+    source: "test"
+  });
+
+  const validation = validateRuntimeIntegrationDryRunPath(record);
+  assert.strictEqual(validation.valid, true, validation.errors.join("; "));
+
+  const missing = validateRuntimeIntegrationDryRunPath({});
+  assert.strictEqual(missing.valid, false);
+  assert.ok(missing.errors.includes("version must be 1"));
+}
+
+function testRuntimeIntegrationDryRunPathRequiresPlanExecutorAndDryRunContract() {
+  const missingPlanExecutor = createRuntimeIntegrationDryRunPath({
+    requiredContracts: [
+      "RuntimeDryRunContract",
+      "RuntimeUserApprovalCheckpoint",
+      "RuntimeIntegrationBoundary",
+      "PermissionGate",
+      "ExecutionAdapterRegistry",
+      "SideEffectSandbox",
+      "ToolExecutionAuditLog",
+      "EvidenceGate",
+      "ReplayStore",
+      "CommitGate"
+    ]
+  });
+
+  const missingPlanExecutorValidation = validateRuntimeIntegrationDryRunPath(missingPlanExecutor);
+  assert.strictEqual(missingPlanExecutorValidation.valid, false);
+  assert.ok(missingPlanExecutorValidation.errors.includes("missing required contract: RuntimeIntegrationPlanExecutor"));
+
+  const missingDryRun = createRuntimeIntegrationDryRunPath({
+    requiredContracts: [
+      "RuntimeIntegrationPlanExecutor",
+      "RuntimeUserApprovalCheckpoint",
+      "RuntimeIntegrationBoundary",
+      "PermissionGate",
+      "ExecutionAdapterRegistry",
+      "SideEffectSandbox",
+      "ToolExecutionAuditLog",
+      "EvidenceGate",
+      "ReplayStore",
+      "CommitGate"
+    ]
+  });
+
+  const missingDryRunValidation = validateRuntimeIntegrationDryRunPath(missingDryRun);
+  assert.strictEqual(missingDryRunValidation.valid, false);
+  assert.ok(missingDryRunValidation.errors.includes("missing required contract: RuntimeDryRunContract"));
+}
+
+function testRuntimeIntegrationDryRunPathBlocksExecution() {
+  const record = createRuntimeIntegrationDryRunPath({
+    pathId: "dry_run_path_blocks_execution_test",
+    source: "test"
+  });
+
+  const classification = classifyRuntimeIntegrationDryRunPath(record);
+  assert.strictEqual(classification.valid, true);
+  assert.strictEqual(classification.metadataOnly, true);
+  assert.strictEqual(classification.executable, false);
+  assert.strictEqual(classification.actualDryRunExecutionAllowed, false);
+  assert.strictEqual(classification.runtimeExecutionAllowed, false);
+  assert.strictEqual(classification.toolExecutionAllowed, false);
+  assert.strictEqual(classification.runtimeFileWritesAllowed, false);
+  assert.strictEqual(classification.processExecutionAllowed, false);
+  assert.strictEqual(classification.gitExecutionAllowedByNodex, false);
+  assert.strictEqual(classification.permissionGrantsAllowed, false);
+  assert.strictEqual(classification.modelOutputAuthorityAllowed, false);
+  assert.strictEqual(classification.replayAuthorityAllowed, false);
+  assert.strictEqual(assertRuntimeIntegrationDryRunPathNotExecutable(record), true);
+
+  for (const value of Object.values(record.authority)) {
+    assert.strictEqual(value, false);
+  }
+}
+
+function testRuntimeIntegrationDryRunPathBlocksAgentHandoffRuntimeWiring() {
+  const record = createRuntimeIntegrationDryRunPath({
+    pathId: "dry_run_path_blocks_agent_handoff_test",
+    source: "test"
+  });
+
+  assert.strictEqual(record.authority.agentHandoffRuntimeWiringAllowed, false);
+
+  const invalid = {
+    ...record,
+    authority: {
+      ...record.authority,
+      agentHandoffRuntimeWiringAllowed: true
+    }
+  };
+
+  const validation = validateRuntimeIntegrationDryRunPath(invalid);
+  assert.strictEqual(validation.valid, false);
+  assert.ok(validation.errors.includes("authority.agentHandoffRuntimeWiringAllowed must be false"));
+}
+
+function testRuntimeIntegrationDryRunPathNoRuntimeExports() {
+  const moduleExports = require("../core/runtimeIntegrationPlanExecutorDryRunPath");
+
+  for (const forbidden of [
+    "executeTool",
+    "runTool",
+    "writeFile",
+    "runGit",
+    "gitCommit",
+    "commit",
+    "grantPermission",
+    "executeCommand",
+    "autoFix",
+    "executeRuntime",
+    "runRuntime",
+    "wireAgentHandoffRunner",
+    "executeDryRun",
+    "runDryRun",
+    "replay",
+    "autoReplay"
+  ]) {
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(moduleExports, forbidden), false);
+  }
+
+  const summary = summarizeRuntimeIntegrationDryRunPath(createRuntimeIntegrationDryRunPath());
+  assert.strictEqual(summary.valid, true);
+  assert.strictEqual(summary.metadataOnly, true);
+  assert.strictEqual(summary.executable, false);
+  assert.strictEqual(summary.actualDryRunExecutionAllowed, false);
+  assert.strictEqual(summary.runtimeExecutionAllowed, false);
+  assert.strictEqual(summary.toolExecutionAllowed, false);
+  assert.strictEqual(summary.agentHandoffRuntimeWiringAllowed, false);
+}

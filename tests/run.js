@@ -5623,3 +5623,124 @@ function testRuntimeUserApprovalNoRuntimeExports() {
   assert.strictEqual(summary.canUseModelOutputAsApproval, false);
   assert.strictEqual(summary.canReplay, false);
 }
+;
+// === RuntimeIntegrationPlanExecutorImplementation v1 tests START ===
+(() => {
+  "use strict";
+
+  const runtimeIntegrationPlanExecutor = require("../core/runtimeIntegrationPlanExecutor");
+  const {
+    RUNTIME_INTEGRATION_PLAN_STATUSES,
+    RUNTIME_INTEGRATION_PLAN_BLOCKED_REASONS,
+    createRuntimeIntegrationPlan,
+    validateRuntimeIntegrationPlan,
+    classifyRuntimeIntegrationPlan,
+    assertRuntimeIntegrationPlanNotExecutable,
+    summarizeRuntimeIntegrationPlan,
+  } = runtimeIntegrationPlanExecutor;
+
+  function assertRuntimeIntegrationPlanExecutor(condition, message) {
+    if (!condition) {
+      throw new Error(`RuntimeIntegrationPlanExecutor test failed: ${message}`);
+    }
+  }
+
+  function createValidRuntimeIntegrationPlanForTest() {
+    return createRuntimeIntegrationPlan({
+      planId: "runtime_integration_plan_executor_test",
+      dryRunContract: { version: 1, executionAllowed: false },
+      userApprovalCheckpoint: { version: 1, runtimeApprovalBlocked: true },
+    });
+  }
+
+  function mutableRuntimeIntegrationPlanClone(plan) {
+    return JSON.parse(JSON.stringify(plan));
+  }
+
+  function testRuntimeIntegrationPlanValidation() {
+    const plan = createValidRuntimeIntegrationPlanForTest();
+    const validation = validateRuntimeIntegrationPlan(plan);
+    const summary = summarizeRuntimeIntegrationPlan(plan);
+
+    assertRuntimeIntegrationPlanExecutor(validation.valid === true, "valid plan should pass validation");
+    assertRuntimeIntegrationPlanExecutor(plan.metadataOnly === true, "plan must remain metadata-only");
+    assertRuntimeIntegrationPlanExecutor(summary.status === RUNTIME_INTEGRATION_PLAN_STATUSES.VALID_METADATA_ONLY, "summary should classify valid metadata-only plan");
+    assertRuntimeIntegrationPlanExecutor(summary.executable === false, "summary must remain non-executable");
+  }
+
+  function testRuntimeIntegrationPlanRequiresDryRunAndApprovalContracts() {
+    const missingDryRunContract = createRuntimeIntegrationPlan({
+      userApprovalCheckpoint: { version: 1, runtimeApprovalBlocked: true },
+    });
+    const missingUserApprovalCheckpoint = createRuntimeIntegrationPlan({
+      dryRunContract: { version: 1, executionAllowed: false },
+    });
+
+    const dryRunValidation = validateRuntimeIntegrationPlan(missingDryRunContract);
+    const approvalValidation = validateRuntimeIntegrationPlan(missingUserApprovalCheckpoint);
+
+    assertRuntimeIntegrationPlanExecutor(dryRunValidation.valid === false, "missing dry-run contract must fail validation");
+    assertRuntimeIntegrationPlanExecutor(dryRunValidation.errors.includes(RUNTIME_INTEGRATION_PLAN_BLOCKED_REASONS.MISSING_DRY_RUN_CONTRACT), "missing dry-run contract reason required");
+    assertRuntimeIntegrationPlanExecutor(approvalValidation.valid === false, "missing approval checkpoint must fail validation");
+    assertRuntimeIntegrationPlanExecutor(approvalValidation.errors.includes(RUNTIME_INTEGRATION_PLAN_BLOCKED_REASONS.MISSING_USER_APPROVAL_CHECKPOINT), "missing approval checkpoint reason required");
+  }
+
+  function testRuntimeIntegrationPlanBlocksExecution() {
+    const plan = createValidRuntimeIntegrationPlanForTest();
+    const classification = classifyRuntimeIntegrationPlan(plan);
+
+    assertRuntimeIntegrationPlanExecutor(classification.valid === true, "valid metadata-only plan should classify as valid");
+    assertRuntimeIntegrationPlanExecutor(classification.executable === false, "classification must be non-executable");
+    assertRuntimeIntegrationPlanExecutor(classification.blockedReasons.includes(RUNTIME_INTEGRATION_PLAN_BLOCKED_REASONS.RUNTIME_EXECUTION_BLOCKED), "runtime execution blocked reason required");
+    assertRuntimeIntegrationPlanExecutor(classification.blockedReasons.includes(RUNTIME_INTEGRATION_PLAN_BLOCKED_REASONS.TOOL_EXECUTION_BLOCKED), "tool execution blocked reason required");
+    assertRuntimeIntegrationPlanExecutor(assertRuntimeIntegrationPlanNotExecutable(plan) === true, "non-executable assertion should pass for valid plan");
+
+    const invalidAuthorityPlan = mutableRuntimeIntegrationPlanClone(plan);
+    invalidAuthorityPlan.authority.runtimeExecutionAllowed = true;
+    assertRuntimeIntegrationPlanExecutor(validateRuntimeIntegrationPlan(invalidAuthorityPlan).valid === false, "runtime authority true must fail validation");
+  }
+
+  function testRuntimeIntegrationPlanBlocksAgentHandoffRuntimeWiring() {
+    const plan = mutableRuntimeIntegrationPlanClone(createValidRuntimeIntegrationPlanForTest());
+    plan.authority.agentHandoffRuntimeWiringAllowed = true;
+
+    const validation = validateRuntimeIntegrationPlan(plan);
+    assertRuntimeIntegrationPlanExecutor(validation.valid === false, "AgentHandoff runtime wiring authority must stay false");
+    assertRuntimeIntegrationPlanExecutor(
+      classifyRuntimeIntegrationPlan(plan).blockedReasons.includes(RUNTIME_INTEGRATION_PLAN_BLOCKED_REASONS.AGENT_HANDOFF_RUNTIME_WIRING_BLOCKED),
+      "AgentHandoff runtime wiring blocked reason required"
+    );
+  }
+
+  function testRuntimeIntegrationPlanNoRuntimeExports() {
+    const exportedNames = Object.keys(runtimeIntegrationPlanExecutor);
+    const forbiddenExportFragments = [
+      "execute" + "Runtime",
+      "execute" + "Tool",
+      "write" + "File",
+      "run" + "Process",
+      "run" + "Git",
+      "commit" + "Changes",
+      "grant" + "Permission",
+      "wire" + "AgentHandoffRunner",
+      "use" + "ModelOutputAsAuthority",
+      "replay" + "Runtime",
+    ];
+
+    for (const exportedName of exportedNames) {
+      for (const forbiddenFragment of forbiddenExportFragments) {
+        assertRuntimeIntegrationPlanExecutor(
+          !exportedName.toLowerCase().includes(forbiddenFragment.toLowerCase()),
+          `forbidden runtime export fragment present: ${exportedName}`
+        );
+      }
+    }
+  }
+
+  testRuntimeIntegrationPlanValidation();
+  testRuntimeIntegrationPlanRequiresDryRunAndApprovalContracts();
+  testRuntimeIntegrationPlanBlocksExecution();
+  testRuntimeIntegrationPlanBlocksAgentHandoffRuntimeWiring();
+  testRuntimeIntegrationPlanNoRuntimeExports();
+})();
+// === RuntimeIntegrationPlanExecutorImplementation v1 tests END ===

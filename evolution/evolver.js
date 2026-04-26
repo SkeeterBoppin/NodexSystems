@@ -464,7 +464,7 @@ async function runEvolution({ maxAttempts = 999, successThreshold = 25, parallel
     }
 
     if (publishedEvolution) {
-      appendText("CONTEXT.md", `\n## EVOLUTION UPDATE - ${new Date().toISOString()}\n${publishedEvolution}\n`);
+      console.log("Published evolution captured for return only; CONTEXT.md write disabled.");
     } else {
       console.log("No candidate cleared publish threshold - previous best preserved");
     }

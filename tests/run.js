@@ -3196,6 +3196,17 @@ function testAdaptiveExplorationAndPublishConfidence() {
 }
 
 
+
+function testDebugGenerationSkillUsesExternalEvidenceOutput() {
+  const source = fs.readFileSync(path.join(__dirname, "..", "skills", "debug_generation.skill.md"), "utf-8");
+  const stalePath = [["Learn", "ing"].join(""), "debug_generation.txt"].join("/");
+
+  assert.strictEqual(source.includes(stalePath), false);
+  assert.strictEqual(source.includes("Nodex Evidence"), true);
+  assert.strictEqual(source.includes("[PROMPT]"), true);
+  assert.strictEqual(source.includes("[CONCLUSION]"), true);
+}
+
 function testLegacyPromptMemoryReadsDeauthorized() {
   const source = fs.readFileSync(path.join(__dirname, "..", "evolution", "evolver.js"), "utf-8");
   const staleRuntimeState = ["memory", ["CURRENT", "STATE"].join("_") + ".json"].join("/");
@@ -3354,6 +3365,7 @@ async function run() {
   testStrategyPerformanceAndSelection();
   testStructuralPatternExtractionAndCandidates();
   testAdaptiveExplorationAndPublishConfidence();
+  testDebugGenerationSkillUsesExternalEvidenceOutput();
   testLegacyPromptMemoryReadsDeauthorized();
   testEvolutionCandidateWorkspaceLocation();
   testBestCandidateSelection();

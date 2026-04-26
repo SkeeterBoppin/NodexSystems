@@ -21,7 +21,7 @@ Do not fix beyond instrumentation unless explicitly told.
 
 ## Required outputs
 Write structured debug evidence to:
-Learning/debug_generation.txt
+C:\Users\Zak\OneDrive\Desktop\Nodex Evidence\debug_generation_<timestamp>.txt
 
 ## Required sections
 [PROMPT]

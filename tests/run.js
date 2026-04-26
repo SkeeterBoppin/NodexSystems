@@ -49,6 +49,10 @@ const {
   validateContextLedger
 } = require("../core/contextLedger");
 const {
+  createRepairRecommendation,
+  validateRepairRecommendation
+} = require("../core/repairLoop");
+const {
   createAgentHandoffPacket,
   validateAgentHandoffPacket
 } = require("../core/agentHandoffPacket");
@@ -2252,6 +2256,192 @@ function testContextLedgerRuntime() {
     assert.deepStrictEqual(recordInput, snapshot);
   }
 }
+function buildRepairRecommendationInput(kind = "syntax", mutate) {
+  const input = {
+    version: 1,
+    repairId: `${kind}_repair_probe`,
+    failure: {
+      kind,
+      subject: "core/repairLoop.js",
+      result: "fail",
+      summary: "node -c failed",
+      data: {
+        command: "node -c core/repairLoop.js"
+      }
+    },
+    title: "Repair syntax failure",
+    instructions: [
+      "Inspect the failing boundary",
+      "Patch only the failing file"
+    ]
+  };
+
+  if (typeof mutate === "function") {
+    mutate(input);
+  }
+
+  return input;
+}
+
+function assertRepairMapping(kind, classification, action) {
+  const packet = createRepairRecommendation(buildRepairRecommendationInput(kind));
+
+  assert.strictEqual(packet.version, 1);
+  assert.strictEqual(packet.status, "recommended");
+  assert.strictEqual(packet.failure.kind, kind);
+  assert.strictEqual(packet.classification, classification);
+  assert.strictEqual(packet.action, action);
+}
+
+function testRepairLoopRuntime() {
+  assertRepairMapping("syntax", "syntax_repair", "inspect_and_patch");
+  assertRepairMapping("test", "test_repair", "inspect_and_patch");
+  assertRepairMapping("validation", "validation_repair", "tighten_contract");
+  assertRepairMapping("dirty_state", "dirty_state_repair", "restore_unexpected_files");
+  assertRepairMapping("boundary", "boundary_repair", "reduce_scope");
+  assertRepairMapping("unknown", "unknown_repair", "inspect_first");
+
+  {
+    assert.strictEqual(validateRepairRecommendation(buildRepairRecommendationInput()), true);
+  }
+
+  {
+    const input = buildRepairRecommendationInput();
+    input.extra = true;
+    assert.throws(() => createRepairRecommendation(input), /unknown/i);
+  }
+
+  {
+    const input = buildRepairRecommendationInput();
+    input.repairId = "syntax-repair";
+    assert.throws(() => createRepairRecommendation(input), /repairId/i);
+  }
+
+  {
+    const input = buildRepairRecommendationInput();
+    input.failure.kind = "runtime";
+    assert.throws(() => createRepairRecommendation(input), /failure\.kind/i);
+  }
+
+  {
+    const input = buildRepairRecommendationInput();
+    input.failure.result = "success";
+    assert.throws(() => createRepairRecommendation(input), /failure\.result/i);
+  }
+
+  {
+    const missingTitleInput = buildRepairRecommendationInput();
+    delete missingTitleInput.title;
+    assert.throws(() => createRepairRecommendation(missingTitleInput), /title/i);
+
+    const emptyTitleInput = buildRepairRecommendationInput();
+    emptyTitleInput.title = " ";
+    assert.throws(() => createRepairRecommendation(emptyTitleInput), /title/i);
+  }
+
+  {
+    const missingInstructionsInput = buildRepairRecommendationInput();
+    delete missingInstructionsInput.instructions;
+    assert.throws(() => createRepairRecommendation(missingInstructionsInput), /instructions/i);
+
+    const emptyInstructionsInput = buildRepairRecommendationInput();
+    emptyInstructionsInput.instructions = [];
+    assert.throws(() => createRepairRecommendation(emptyInstructionsInput), /instructions/i);
+
+    const blankInstructionInput = buildRepairRecommendationInput();
+    blankInstructionInput.instructions = ["Inspect", " "];
+    assert.throws(() => createRepairRecommendation(blankInstructionInput), /instructions\[1\]/i);
+  }
+
+  {
+    const input = buildRepairRecommendationInput("boundary", repairInput => {
+      repairInput.failure.data = {
+        paths: [" evolution\\evolver.js ", " execution\\pythonSandbox.js "]
+      };
+    });
+    const snapshot = JSON.parse(JSON.stringify(input));
+    const packet = createRepairRecommendation(input);
+
+    assert.deepStrictEqual(input, snapshot);
+    assert.notStrictEqual(packet, input);
+    assert.notStrictEqual(packet.failure, input.failure);
+    assert.notStrictEqual(packet.instructions, input.instructions);
+    assert.notStrictEqual(packet.failure.data, input.failure.data);
+  }
+
+  {
+    const input = buildRepairRecommendationInput();
+    const packet = createRepairRecommendation(input);
+
+    packet.failure.data.command = "changed";
+    packet.instructions[0] = "changed";
+
+    assert.strictEqual(input.failure.data.command, "node -c core/repairLoop.js");
+    assert.strictEqual(input.instructions[0], "Inspect the failing boundary");
+  }
+
+  {
+    const input = buildRepairRecommendationInput("validation", repairInput => {
+      repairInput.contextLedgerRecord = buildContextLedgerRecordInput();
+    });
+
+    const packet = createRepairRecommendation(input);
+
+    assert.strictEqual(packet.contextLedgerRecord.ledgerId, "nodex_context");
+    assert.strictEqual(packet.contextLedgerRecord.sequence, 1);
+    assert.strictEqual(packet.contextLedgerRecord.recordId, "agent_handoff_bridge_v1");
+  }
+
+  {
+    const input = buildRepairRecommendationInput("validation", repairInput => {
+      repairInput.contextLedgerRecord = buildContextLedgerRecordInput();
+      repairInput.contextLedgerRecord.ledgerId = "invalid-ledger";
+    });
+
+    assert.throws(() => createRepairRecommendation(input), /ledgerId|context ledger/i);
+  }
+
+  {
+    const bridgeInput = buildAgentHandoffBridgeInput();
+    const input = buildRepairRecommendationInput("boundary", repairInput => {
+      repairInput.taskGraph = bridgeInput.taskGraph;
+      repairInput.title = bridgeInput.title;
+      repairInput.instructions = bridgeInput.instructions;
+    });
+
+    const packet = createRepairRecommendation(input);
+
+    assert.strictEqual(packet.agentHandoffPacket.mode, "inspect_only");
+    assert.strictEqual(packet.agentHandoffPacket.type, "inspect");
+    assert.strictEqual(packet.agentHandoffPacket.taskGraph.graphId, "agent_handoff_bridge_graph");
+  }
+
+  {
+    const bridgeInput = buildAgentHandoffBridgeInput(input => {
+      input.taskGraph.steps.forEach(step => {
+        step.status = "passed";
+      });
+    });
+
+    const input = buildRepairRecommendationInput("boundary", repairInput => {
+      repairInput.taskGraph = bridgeInput.taskGraph;
+      repairInput.title = bridgeInput.title;
+      repairInput.instructions = bridgeInput.instructions;
+    });
+
+    assert.throws(() => createRepairRecommendation(input), /current executable step|taskGraph|handoff|passing evidence|gate syntax|steps\[\d+\]/i);
+  }
+
+  {
+    const repairLoopSource = fs.readFileSync(path.join(__dirname, "..", "core", "repairLoop.js"), "utf-8");
+
+    assert.strictEqual(/require\(["']fs["']\)/.test(repairLoopSource), false);
+    assert.strictEqual(/child_process/.test(repairLoopSource), false);
+    assert.strictEqual(/writeFileSync|appendFileSync|rmSync|unlinkSync/.test(repairLoopSource), false);
+    assert.strictEqual(/spawn|exec\(|process\.exit/.test(repairLoopSource), false);
+    assert.strictEqual(/git\s/.test(repairLoopSource), false);
+  }
+}
 function buildEvidenceGateInput() {
   return {
     version: 1,
@@ -3040,8 +3230,9 @@ async function run() {
   testAgentHandoffPacketRuntime();
   testAgentHandoffBridgeRuntime();
   testMemoryCapsuleRuntime();
-    testContextLedgerRuntime();
-testEvidenceGateRuntime();
+  testContextLedgerRuntime();
+  testRepairLoopRuntime();
+  testEvidenceGateRuntime();
   testTranscriptParserRuntime();
   testTranscriptEvidenceAdapterRuntime();
   testFallbackRouting();

@@ -1,5 +1,16 @@
 const assert = require("assert");
 const {
+  RUNTIME_USER_APPROVAL_SCOPES,
+  RUNTIME_USER_APPROVAL_STATES,
+  RUNTIME_USER_APPROVAL_DECISIONS,
+  RUNTIME_USER_APPROVAL_BLOCKED_REASONS,
+  createRuntimeUserApprovalCheckpoint,
+  validateRuntimeUserApprovalCheckpoint,
+  classifyRuntimeUserApprovalCheckpoint,
+  assertRuntimeUserApprovalNotGranted,
+  summarizeRuntimeUserApprovalCheckpoint
+} = require("../core/runtimeUserApprovalCheckpoint");
+const {
   RUNTIME_DRY_RUN_REQUEST_TYPES,
   RUNTIME_DRY_RUN_STATUSES,
   RUNTIME_DRY_RUN_AUTHORITY_STATES,
@@ -3735,6 +3746,11 @@ async function run() {
   testRuntimeDryRunResultIsNotAuthority();
   testRuntimeDryRunRequiresGateSpine();
   testRuntimeDryRunNoRuntimeExports();
+  testRuntimeUserApprovalCheckpointValidation();
+  testRuntimeUserApprovalDoesNotGrantRuntime();
+  testRuntimeUserApprovalBlocksImplicitAndModelApproval();
+  testRuntimeUserApprovalRequiresGateSpine();
+  testRuntimeUserApprovalNoRuntimeExports();
   testContextExporterAuthorityRuntime();
   testFallbackRouting();
   testPythonSandboxSafeExecution();
@@ -5444,5 +5460,166 @@ function testRuntimeDryRunNoRuntimeExports() {
   assert.strictEqual(summary.canRunGit, false);
   assert.strictEqual(summary.canCommit, false);
   assert.strictEqual(summary.canGrantPermissions, false);
+  assert.strictEqual(summary.canReplay, false);
+}
+const RUNTIME_USER_APPROVAL_REQUIRED_GATES_TEST = [
+  "RuntimeIntegrationBoundary",
+  "PermissionGate",
+  "RuntimeDryRunContract",
+  "ExecutionAdapterRegistry",
+  "SideEffectSandbox",
+  "ToolExecutionAuditLog",
+  "EvidenceGate",
+  "ReplayStore",
+  "CommitGate"
+];
+
+function makeRuntimeUserApprovalCheckpoint(overrides = {}) {
+  return {
+    approvalId: "runtime_user_approval_checkpoint_test",
+    source: "test_harness",
+    scope: "runtime_integration",
+    targetCapability: "agent_runtime",
+    requestedAction: "plan_runtime_integration",
+    requiredGates: RUNTIME_USER_APPROVAL_REQUIRED_GATES_TEST,
+    userApprovalState: "explicitly_approved_for_plan_only",
+    decision: "plan_only",
+    runtimeExecutionAllowed: false,
+    permissionGrant: false,
+    modelOutputApproval: false,
+    blockedReasons: [],
+    ...overrides
+  };
+}
+
+function testRuntimeUserApprovalCheckpointValidation() {
+  assert.ok(RUNTIME_USER_APPROVAL_SCOPES.includes("runtime_integration"));
+  assert.ok(RUNTIME_USER_APPROVAL_STATES.includes("explicitly_approved_for_plan_only"));
+  assert.ok(RUNTIME_USER_APPROVAL_DECISIONS.includes("plan_only"));
+  assert.ok(RUNTIME_USER_APPROVAL_BLOCKED_REASONS.includes("approval_not_runtime_authority"));
+
+  const missing = validateRuntimeUserApprovalCheckpoint({});
+  assert.strictEqual(missing.valid, false);
+  assert.ok(missing.errors.some(error => error.includes("missing required field")));
+
+  const invalid = validateRuntimeUserApprovalCheckpoint(makeRuntimeUserApprovalCheckpoint({
+    scope: "not_real",
+    userApprovalState: "not_real",
+    decision: "not_real",
+    blockedReasons: ["not_real"]
+  }));
+
+  assert.strictEqual(invalid.valid, false);
+  assert.ok(invalid.errors.some(error => error.includes("unknown scope")));
+  assert.ok(invalid.errors.some(error => error.includes("unknown userApprovalState")));
+  assert.ok(invalid.errors.some(error => error.includes("unknown decision")));
+  assert.ok(invalid.errors.some(error => error.includes("unknown blockedReason")));
+}
+
+function testRuntimeUserApprovalDoesNotGrantRuntime() {
+  const classified = classifyRuntimeUserApprovalCheckpoint(makeRuntimeUserApprovalCheckpoint());
+
+  assert.strictEqual(classified.status, "blocked");
+  assert.strictEqual(classified.runtimeExecutionAllowed, false);
+  assert.strictEqual(classified.permissionGrant, false);
+  assert.strictEqual(classified.modelOutputApproval, false);
+  assert.strictEqual(classified.userApprovalGranted, false);
+  assert.strictEqual(classified.canExecuteRuntime, false);
+  assert.strictEqual(classified.canExecuteTools, false);
+  assert.strictEqual(classified.canWriteFiles, false);
+  assert.strictEqual(classified.canRunProcess, false);
+  assert.strictEqual(classified.canRunGit, false);
+  assert.strictEqual(classified.canCommit, false);
+  assert.strictEqual(classified.canGrantPermissions, false);
+  assert.strictEqual(classified.canUseModelOutputAsApproval, false);
+  assert.strictEqual(classified.canReplay, false);
+  assert.ok(classified.checkpoint.blockedReasons.includes("approval_not_runtime_authority"));
+  assert.strictEqual(assertRuntimeUserApprovalNotGranted(classified.checkpoint), true);
+
+  const created = createRuntimeUserApprovalCheckpoint(makeRuntimeUserApprovalCheckpoint({
+    blockedReasons: ["approval_not_runtime_authority"]
+  }));
+
+  assert.strictEqual(created.runtimeExecutionAllowed, false);
+  assert.strictEqual(created.permissionGrant, false);
+  assert.strictEqual(created.modelOutputApproval, false);
+}
+
+function testRuntimeUserApprovalBlocksImplicitAndModelApproval() {
+  const implicit = validateRuntimeUserApprovalCheckpoint(makeRuntimeUserApprovalCheckpoint({
+    implicitApproval: true
+  }));
+
+  assert.strictEqual(implicit.valid, false);
+  assert.ok(implicit.errors.some(error => error.includes("implicit approval")));
+
+  const model = validateRuntimeUserApprovalCheckpoint(makeRuntimeUserApprovalCheckpoint({
+    modelOutputApproval: true,
+    modelOutputUsedAsApproval: true
+  }));
+
+  assert.strictEqual(model.valid, false);
+  assert.ok(model.errors.some(error => error.includes("modelOutputApproval must be false")));
+  assert.ok(model.errors.some(error => error.includes("model output")));
+
+  const classified = classifyRuntimeUserApprovalCheckpoint(makeRuntimeUserApprovalCheckpoint({
+    userApprovalState: "missing",
+    modelOutputUsedAsApproval: true,
+    permissionGrant: true,
+    runtimeExecutionAllowed: true,
+    replayAllowed: true
+  }));
+
+  assert.ok(classified.checkpoint.blockedReasons.includes("implicit_approval_blocked"));
+  assert.ok(classified.checkpoint.blockedReasons.includes("model_output_approval_blocked"));
+  assert.ok(classified.checkpoint.blockedReasons.includes("permission_grant_blocked"));
+  assert.ok(classified.checkpoint.blockedReasons.includes("runtime_execution_blocked"));
+  assert.ok(classified.checkpoint.blockedReasons.includes("replay_authority_blocked"));
+}
+
+function testRuntimeUserApprovalRequiresGateSpine() {
+  const missingGate = validateRuntimeUserApprovalCheckpoint(makeRuntimeUserApprovalCheckpoint({
+    requiredGates: RUNTIME_USER_APPROVAL_REQUIRED_GATES_TEST.filter(gate => gate !== "RuntimeDryRunContract")
+  }));
+
+  assert.strictEqual(missingGate.valid, false);
+  assert.ok(missingGate.errors.some(error => error.includes("missing required gate: RuntimeDryRunContract")));
+}
+
+function testRuntimeUserApprovalNoRuntimeExports() {
+  const moduleExports = require("../core/runtimeUserApprovalCheckpoint");
+
+  for (const forbidden of [
+    "executeTool",
+    "runTool",
+    "writeFile",
+    "runGit",
+    "gitCommit",
+    "commit",
+    "grantPermission",
+    "executeCommand",
+    "autoFix",
+    "executeRuntime",
+    "runRuntime",
+    "replay",
+    "autoReplay"
+  ]) {
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(moduleExports, forbidden), false);
+  }
+
+  const summary = summarizeRuntimeUserApprovalCheckpoint(makeRuntimeUserApprovalCheckpoint());
+
+  assert.strictEqual(summary.runtimeExecutionAllowed, false);
+  assert.strictEqual(summary.permissionGrant, false);
+  assert.strictEqual(summary.modelOutputApproval, false);
+  assert.strictEqual(summary.userApprovalGranted, false);
+  assert.strictEqual(summary.canExecuteRuntime, false);
+  assert.strictEqual(summary.canExecuteTools, false);
+  assert.strictEqual(summary.canWriteFiles, false);
+  assert.strictEqual(summary.canRunProcess, false);
+  assert.strictEqual(summary.canRunGit, false);
+  assert.strictEqual(summary.canCommit, false);
+  assert.strictEqual(summary.canGrantPermissions, false);
+  assert.strictEqual(summary.canUseModelOutputAsApproval, false);
   assert.strictEqual(summary.canReplay, false);
 }

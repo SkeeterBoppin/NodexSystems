@@ -1,5 +1,18 @@
 const assert = require("assert");
 const {
+  RUNTIME_DRY_RUN_REQUEST_TYPES,
+  RUNTIME_DRY_RUN_STATUSES,
+  RUNTIME_DRY_RUN_AUTHORITY_STATES,
+  RUNTIME_DRY_RUN_BLOCKED_REASONS,
+  createRuntimeDryRunRequest,
+  validateRuntimeDryRunRequest,
+  classifyRuntimeDryRunRequest,
+  createRuntimeDryRunResult,
+  validateRuntimeDryRunResult,
+  assertRuntimeDryRunResultNotAuthority,
+  summarizeRuntimeDryRunRecord
+} = require("../core/runtimeDryRunContract");
+const {
   TOOL_EXECUTION_AUDIT_RECORD_TYPES,
   TOOL_EXECUTION_AUDIT_STATUSES,
   TOOL_EXECUTION_AUDIT_AUTHORITY_STATES,
@@ -3717,6 +3730,11 @@ async function run() {
   testToolExecutionAuditRecordsAreNotReplayable();
   testToolExecutionAuditRequiresGateSpine();
   testToolExecutionAuditNoRuntimeExports();
+  testRuntimeDryRunRequestValidation();
+  testRuntimeDryRunRequestBlocksExecution();
+  testRuntimeDryRunResultIsNotAuthority();
+  testRuntimeDryRunRequiresGateSpine();
+  testRuntimeDryRunNoRuntimeExports();
   testContextExporterAuthorityRuntime();
   testFallbackRouting();
   testPythonSandboxSafeExecution();
@@ -5250,4 +5268,181 @@ function testToolExecutionAuditNoRuntimeExports() {
   assert.strictEqual(summary.canCommit, false);
   assert.strictEqual(summary.canGrantPermissions, false);
   assert.strictEqual(summary.canReplaySideEffects, false);
+}
+const RUNTIME_DRY_RUN_REQUIRED_GATES_TEST = [
+  "RuntimeIntegrationBoundary",
+  "PermissionGate",
+  "ExecutionAdapterRegistry",
+  "SideEffectSandbox",
+  "ToolExecutionAuditLog",
+  "EvidenceGate",
+  "ReplayStore",
+  "CommitGate"
+];
+
+function makeRuntimeDryRunRequest(overrides = {}) {
+  return {
+    dryRunId: "runtime_dry_run_request_test",
+    source: "test_harness",
+    requestType: "tool_dry_run",
+    targetCapability: "tools/commandTool.js",
+    sideEffectLevel: "process_execution",
+    requiredGates: RUNTIME_DRY_RUN_REQUIRED_GATES_TEST,
+    expectedMutation: "none",
+    executionAllowed: false,
+    runtimeAllowed: false,
+    blockedReasons: [],
+    ...overrides
+  };
+}
+
+function makeRuntimeDryRunResult(overrides = {}) {
+  return {
+    dryRunId: "runtime_dry_run_request_test",
+    resultId: "runtime_dry_run_result_test",
+    source: "test_harness",
+    status: "simulated",
+    observedMutation: "none",
+    expectedMutationMatched: true,
+    authorityState: "simulation_only",
+    runtimeExecutionAuthority: false,
+    replayAllowed: false,
+    permissionGrant: false,
+    blockedReasons: ["dry_run_result_not_authority"],
+    ...overrides
+  };
+}
+
+function testRuntimeDryRunRequestValidation() {
+  assert.ok(RUNTIME_DRY_RUN_REQUEST_TYPES.includes("tool_dry_run"));
+  assert.ok(RUNTIME_DRY_RUN_STATUSES.includes("blocked"));
+  assert.ok(RUNTIME_DRY_RUN_AUTHORITY_STATES.includes("simulation_only"));
+  assert.ok(RUNTIME_DRY_RUN_BLOCKED_REASONS.includes("actual_dry_run_execution_blocked"));
+
+  const missing = validateRuntimeDryRunRequest({});
+  assert.strictEqual(missing.valid, false);
+  assert.ok(missing.errors.some(error => error.includes("missing required field")));
+
+  const invalid = validateRuntimeDryRunRequest(makeRuntimeDryRunRequest({
+    requestType: "not_real",
+    status: "not_real",
+    blockedReasons: ["not_real"]
+  }));
+
+  assert.strictEqual(invalid.valid, false);
+  assert.ok(invalid.errors.some(error => error.includes("unknown requestType")));
+  assert.ok(invalid.errors.some(error => error.includes("unknown status")));
+  assert.ok(invalid.errors.some(error => error.includes("unknown blockedReason")));
+
+  const executable = validateRuntimeDryRunRequest(makeRuntimeDryRunRequest({
+    executionAllowed: true,
+    runtimeAllowed: true
+  }));
+
+  assert.strictEqual(executable.valid, false);
+  assert.ok(executable.errors.some(error => error.includes("executionAllowed must be false")));
+  assert.ok(executable.errors.some(error => error.includes("runtimeAllowed must be false")));
+}
+
+function testRuntimeDryRunRequestBlocksExecution() {
+  for (const [requestType, expectedReason] of [
+    ["tool_dry_run", "tool_execution_blocked"],
+    ["file_write_dry_run", "file_write_blocked"],
+    ["command_dry_run", "process_execution_blocked"],
+    ["git_dry_run", "git_execution_blocked"],
+    ["runtime_integration_dry_run", "runtime_execution_blocked"]
+  ]) {
+    const classified = classifyRuntimeDryRunRequest(makeRuntimeDryRunRequest({
+      requestType,
+      targetCapability: requestType
+    }));
+
+    assert.strictEqual(classified.status, "blocked");
+    assert.strictEqual(classified.executionAllowed, false);
+    assert.strictEqual(classified.runtimeAllowed, false);
+    assert.strictEqual(classified.canExecuteTools, false);
+    assert.strictEqual(classified.canWriteFiles, false);
+    assert.strictEqual(classified.canRunProcess, false);
+    assert.strictEqual(classified.canRunGit, false);
+    assert.strictEqual(classified.canCommit, false);
+    assert.strictEqual(classified.canGrantPermissions, false);
+    assert.strictEqual(classified.canReplay, false);
+    assert.ok(classified.request.blockedReasons.includes("actual_dry_run_execution_blocked"));
+    assert.ok(classified.request.blockedReasons.includes(expectedReason));
+  }
+
+  const created = createRuntimeDryRunRequest(makeRuntimeDryRunRequest({
+    blockedReasons: ["actual_dry_run_execution_blocked"]
+  }));
+  assert.strictEqual(created.executionAllowed, false);
+  assert.strictEqual(created.runtimeAllowed, false);
+}
+
+function testRuntimeDryRunResultIsNotAuthority() {
+  const result = createRuntimeDryRunResult(makeRuntimeDryRunResult());
+  assert.strictEqual(result.runtimeExecutionAuthority, false);
+  assert.strictEqual(result.replayAllowed, false);
+  assert.strictEqual(result.permissionGrant, false);
+  assert.strictEqual(assertRuntimeDryRunResultNotAuthority(result), true);
+
+  const badAuthority = validateRuntimeDryRunResult(makeRuntimeDryRunResult({
+    runtimeExecutionAuthority: true,
+    replayAllowed: true,
+    permissionGrant: true,
+    provesCurrentRepoState: true
+  }));
+
+  assert.strictEqual(badAuthority.valid, false);
+  assert.ok(badAuthority.errors.some(error => error.includes("runtimeExecutionAuthority must be false")));
+  assert.ok(badAuthority.errors.some(error => error.includes("replayAllowed must be false")));
+  assert.ok(badAuthority.errors.some(error => error.includes("permissionGrant must be false")));
+  assert.ok(badAuthority.errors.some(error => error.includes("must not prove current repo state")));
+
+  const summary = summarizeRuntimeDryRunRecord(result);
+  assert.strictEqual(summary.kind, "result");
+  assert.strictEqual(summary.runtimeExecutionAuthority, false);
+  assert.strictEqual(summary.replayAllowed, false);
+  assert.strictEqual(summary.permissionGrant, false);
+}
+
+function testRuntimeDryRunRequiresGateSpine() {
+  const missingGate = validateRuntimeDryRunRequest(makeRuntimeDryRunRequest({
+    requiredGates: RUNTIME_DRY_RUN_REQUIRED_GATES_TEST.filter(gate => gate !== "ToolExecutionAuditLog")
+  }));
+
+  assert.strictEqual(missingGate.valid, false);
+  assert.ok(missingGate.errors.some(error => error.includes("missing required gate: ToolExecutionAuditLog")));
+}
+
+function testRuntimeDryRunNoRuntimeExports() {
+  const moduleExports = require("../core/runtimeDryRunContract");
+
+  for (const forbidden of [
+    "executeTool",
+    "runTool",
+    "writeFile",
+    "runGit",
+    "gitCommit",
+    "commit",
+    "grantPermission",
+    "executeCommand",
+    "autoFix",
+    "executeDryRun",
+    "runDryRun",
+    "replay",
+    "autoReplay"
+  ]) {
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(moduleExports, forbidden), false);
+  }
+
+  const summary = summarizeRuntimeDryRunRecord(makeRuntimeDryRunRequest());
+  assert.strictEqual(summary.executionAllowed, false);
+  assert.strictEqual(summary.runtimeAllowed, false);
+  assert.strictEqual(summary.canExecuteTools, false);
+  assert.strictEqual(summary.canWriteFiles, false);
+  assert.strictEqual(summary.canRunProcess, false);
+  assert.strictEqual(summary.canRunGit, false);
+  assert.strictEqual(summary.canCommit, false);
+  assert.strictEqual(summary.canGrantPermissions, false);
+  assert.strictEqual(summary.canReplay, false);
 }

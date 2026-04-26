@@ -6532,3 +6532,156 @@ function testRuntimeDryRunExecutionPathNoRuntimeExports() {
 
   console.log("ControlCoverageMatrixImplementation v1 tests passed");
 })();
+
+/* ModelOutputProposalAuthoritySplitImplementation v1 tests */
+(function runModelOutputProposalAuthoritySplitImplementationV1Tests() {
+  const assert = require("node:assert/strict");
+  const {
+    MODEL_OUTPUT_PROPOSAL_AUTHORITY_SPLIT_STATUSES,
+    MODEL_OUTPUT_PROPOSAL_FIELD_TYPES,
+    createModelOutputProposalAuthoritySplitManifest,
+    validateModelOutputProposalAuthoritySplitManifest,
+    classifyModelOutputProposalAuthoritySplitManifest,
+    assertModelOutputProposalAuthoritySplitManifestNotAuthority,
+    summarizeModelOutputProposalAuthoritySplitManifest,
+  } = require("../core/modelOutputProposalAuthoritySplitManifest.js");
+
+  function numbered(prefix, count) {
+    return Array.from({ length: count }, (_, index) => `${prefix}-${index + 1}`);
+  }
+
+  function makeValidManifest(overrides = {}) {
+    return {
+      manifestId: "mopasm-test-001",
+      sourceGap: "LGG-13",
+      sourceGateName: "ModelOutputProposalAuthoritySplit",
+      proposalFields: [
+        "proposalText",
+        "rationale",
+        "constraints",
+        "requestedAction",
+        "evidencePointers",
+        "riskNotes",
+        "localValidationPointers",
+        "nonAuthorityClassification",
+      ],
+      forbiddenAuthorityFields: [
+        "pass",
+        "allowed_now",
+        "activationApproved",
+        "runtimeApproved",
+        "permissionGranted",
+        "capabilityToken",
+        "activationAllowed",
+        "runtimeExecutionAllowed",
+        "toolExecutionAllowed",
+        "permissionGrantsAllowed",
+        "modelOutputAuthorityAllowed",
+        "replayAuthorityAllowed",
+        "agentHandoffRuntimeWiringAllowed",
+      ],
+      rejectionRules: numbered("rejection-rule", 10),
+      adversarialTests: numbered("adversarial-test", 10),
+      localValidators: numbered("local-validator", 6),
+      boundaryCoverage: numbered("boundary", 5),
+      authorityFieldPolicy: "proposal_fields_must_not_set_authority",
+      sourceCommit: "test-source-commit",
+      schemaVersion: "model-output-proposal-authority-split-manifest-v1",
+      producer: "local-producer",
+      verifier: "local-verifier",
+      ...overrides,
+    };
+  }
+
+  function testModelOutputProposalAuthoritySplitManifestValidation() {
+    const manifest = createModelOutputProposalAuthoritySplitManifest(makeValidManifest());
+    const validation = validateModelOutputProposalAuthoritySplitManifest(manifest);
+    assert.equal(validation.valid, true);
+    assert.equal(validation.status, MODEL_OUTPUT_PROPOSAL_AUTHORITY_SPLIT_STATUSES.VALID);
+
+    const classification = classifyModelOutputProposalAuthoritySplitManifest(manifest);
+    assert.equal(classification.valid, true);
+    assert.equal(classification.errorCount, 0);
+    assert.equal(MODEL_OUTPUT_PROPOSAL_FIELD_TYPES.PROPOSAL, "proposal");
+  }
+
+  function testModelOutputProposalAuthoritySplitRequiresProposalAndForbiddenAuthorityFields() {
+    const insufficientProposalFields = createModelOutputProposalAuthoritySplitManifest(makeValidManifest({
+      proposalFields: numbered("proposal", 7),
+    }));
+    assert.equal(validateModelOutputProposalAuthoritySplitManifest(insufficientProposalFields).valid, false);
+
+    const insufficientForbiddenFields = createModelOutputProposalAuthoritySplitManifest(makeValidManifest({
+      forbiddenAuthorityFields: numbered("authority", 12),
+    }));
+    assert.equal(validateModelOutputProposalAuthoritySplitManifest(insufficientForbiddenFields).valid, false);
+
+    const sameProducerVerifier = createModelOutputProposalAuthoritySplitManifest(makeValidManifest({
+      verifier: "local-producer",
+    }));
+    assert.equal(validateModelOutputProposalAuthoritySplitManifest(sameProducerVerifier).valid, false);
+  }
+
+  function testModelOutputProposalAuthoritySplitRejectsAuthorityFields() {
+    const modelAuthority = createModelOutputProposalAuthoritySplitManifest(makeValidManifest({
+      modelOutputAuthorityAllowed: true,
+    }));
+    const validation = validateModelOutputProposalAuthoritySplitManifest(modelAuthority);
+    assert.equal(validation.valid, false);
+    assert.equal(validation.authorityFields.includes("modelOutputAuthorityAllowed"), true);
+
+    const conflictingProposal = createModelOutputProposalAuthoritySplitManifest(makeValidManifest({
+      proposalFields: [
+        "proposalText",
+        "rationale",
+        "constraints",
+        "requestedAction",
+        "evidencePointers",
+        "riskNotes",
+        "localValidationPointers",
+        "modelOutputAuthorityAllowed",
+      ],
+    }));
+    assert.equal(validateModelOutputProposalAuthoritySplitManifest(conflictingProposal).valid, false);
+
+    const nestedCapability = createModelOutputProposalAuthoritySplitManifest(makeValidManifest({
+      nested: { capabilityToken: "synthetic-token" },
+    }));
+    assert.throws(() => assertModelOutputProposalAuthoritySplitManifestNotAuthority(nestedCapability), /authority fields/);
+  }
+
+  function testModelOutputProposalAuthoritySplitPreservesBoundaryFalse() {
+    const manifest = createModelOutputProposalAuthoritySplitManifest(makeValidManifest());
+    const summary = summarizeModelOutputProposalAuthoritySplitManifest(manifest);
+    assert.equal(summary.activationAllowed, false);
+    assert.equal(summary.runtimeIntegrationAllowed, false);
+    assert.equal(summary.actualDryRunExecutionAllowed, false);
+    assert.equal(summary.runtimeExecutionAllowed, false);
+    assert.equal(summary.toolExecutionAllowed, false);
+    assert.equal(summary.runtimeFileWritesAllowed, false);
+    assert.equal(summary.processExecutionAllowed, false);
+    assert.equal(summary.gitExecutionAllowedByNodex, false);
+    assert.equal(summary.permissionGrantsAllowed, false);
+    assert.equal(summary.agentHandoffRuntimeWiringAllowed, false);
+    assert.equal(summary.modelOutputAuthorityAllowed, false);
+    assert.equal(summary.replayAuthorityAllowed, false);
+  }
+
+  function testModelOutputProposalAuthoritySplitNoRuntimeExports() {
+    const manifestModule = require("../core/modelOutputProposalAuthoritySplitManifest.js");
+    const exportedKeys = Object.keys(manifestModule);
+    assert.equal(exportedKeys.includes("execute"), false);
+    assert.equal(exportedKeys.includes("run"), false);
+    assert.equal(exportedKeys.includes("grantAuthority"), false);
+    assert.equal(exportedKeys.includes("approveActivation"), false);
+    assert.equal(exportedKeys.includes("allowRuntimeExecution"), false);
+  }
+
+  testModelOutputProposalAuthoritySplitManifestValidation();
+  testModelOutputProposalAuthoritySplitRequiresProposalAndForbiddenAuthorityFields();
+  testModelOutputProposalAuthoritySplitRejectsAuthorityFields();
+  testModelOutputProposalAuthoritySplitPreservesBoundaryFalse();
+  testModelOutputProposalAuthoritySplitNoRuntimeExports();
+
+  console.log("ModelOutputProposalAuthoritySplitImplementation v1 tests passed");
+})();

@@ -1,5 +1,17 @@
 const assert = require("assert");
 const {
+  REPLAY_RECORD_TYPES,
+  REPLAY_AUTHORITY_STATES,
+  REPLAY_BLOCKED_AUTHORITY_STATES,
+  REPLAY_FRESHNESS_STATES,
+  REPLAY_VALIDATION_STATES,
+  createReplayRecord,
+  validateReplayRecord,
+  classifyReplayRecordAuthority,
+  assertReplayRecordNotProof,
+  assertReplayRecordFreshForUse
+} = require("../core/replayStore");
+const {
   TOOL_CAPABILITY_POLICIES,
   CAPABILITY_CLASSES,
   SIDE_EFFECT_LEVELS,
@@ -3587,6 +3599,11 @@ async function run() {
   testToolCapabilityRegistryReadScope();
   testToolCapabilityRegistryRuntimeIntegrationBlocked();
   testToolCapabilityRegistryNoToolExecution();
+  testReplayStoreRecordValidation();
+  testReplayStoreRecordsAreNotProof();
+  testReplayStoreFreshnessGate();
+  testReplayStoreSideEffectReplayBlocked();
+  testReplayStorePersistenceSchema();
   testContextExporterAuthorityRuntime();
   testFallbackRouting();
   testPythonSandboxSafeExecution();
@@ -4005,4 +4022,149 @@ function testToolCapabilityRegistryNoToolExecution() {
   assert.ok(commandPolicy);
   assert.strictEqual(canUseToolCapability(commandPolicy, "metadata_inspection"), true);
   assert.strictEqual(canUseToolCapability(commandPolicy, "runtime_use"), false);
+}
+function makeReplayRecord(overrides = {}) {
+  return {
+    recordId: "replay_record_test_001",
+    recordType: "debug_replay_record",
+    createdAt: "2026-04-25T00:00:00.000Z",
+    source: "test_harness",
+    operation: "inspect",
+    inputs: { input: true },
+    outputs: { output: true },
+    sideEffectLevel: "metadata_only",
+    validationState: "schema_validated",
+    authorityState: "historical_debug_record",
+    freshnessState: "historical",
+    ...overrides
+  };
+}
+
+function testReplayStoreRecordValidation() {
+  assert.ok(REPLAY_RECORD_TYPES.includes("debug_replay_record"));
+  assert.ok(REPLAY_AUTHORITY_STATES.includes("historical_debug_record"));
+  assert.ok(REPLAY_BLOCKED_AUTHORITY_STATES.includes("proof"));
+  assert.ok(REPLAY_FRESHNESS_STATES.includes("stale"));
+  assert.ok(REPLAY_VALIDATION_STATES.includes("schema_validated"));
+
+  const missing = validateReplayRecord({});
+  assert.strictEqual(missing.valid, false);
+  assert.ok(missing.errors.some(error => error.includes("missing required field")));
+
+  const invalid = validateReplayRecord(makeReplayRecord({
+    recordType: "not_real",
+    authorityState: "not_real",
+    freshnessState: "not_real",
+    validationState: "not_real",
+    sideEffectLevel: "not_real"
+  }));
+
+  assert.strictEqual(invalid.valid, false);
+  assert.ok(invalid.errors.some(error => error.includes("unknown recordType")));
+  assert.ok(invalid.errors.some(error => error.includes("unknown authorityState")));
+  assert.ok(invalid.errors.some(error => error.includes("unknown freshnessState")));
+  assert.ok(invalid.errors.some(error => error.includes("unknown validationState")));
+  assert.ok(invalid.errors.some(error => error.includes("unknown sideEffectLevel")));
+}
+
+function testReplayStoreRecordsAreNotProof() {
+  const proof = validateReplayRecord(makeReplayRecord({ authorityState: "proof" }));
+  assert.strictEqual(proof.valid, false);
+  assert.ok(proof.errors.some(error => error.includes("blocked authorityState")));
+
+  for (const authorityState of [
+    "live_repo_state",
+    "permission_grant",
+    "runtime_execution_authority"
+  ]) {
+    const invalid = validateReplayRecord(makeReplayRecord({ authorityState }));
+    assert.strictEqual(invalid.valid, false);
+  }
+
+  const record = createReplayRecord(makeReplayRecord());
+  const classification = classifyReplayRecordAuthority(record);
+
+  assert.strictEqual(classification.canServeAsProof, false);
+  assert.strictEqual(classification.canRepresentLiveRepoState, false);
+  assert.strictEqual(classification.canGrantPermission, false);
+  assert.strictEqual(classification.canOverrideLiveRepoEvidence, false);
+  assert.strictEqual(assertReplayRecordNotProof(record), true);
+}
+
+function testReplayStoreFreshnessGate() {
+  assert.throws(
+    () => assertReplayRecordFreshForUse(makeReplayRecord({
+      freshnessState: "stale",
+      validationState: "freshness_validated"
+    })),
+    /not fresh enough/
+  );
+
+  assert.throws(
+    () => assertReplayRecordFreshForUse(makeReplayRecord({
+      freshnessState: "unknown",
+      validationState: "freshness_validated"
+    })),
+    /not fresh enough/
+  );
+
+  assert.throws(
+    () => assertReplayRecordFreshForUse(makeReplayRecord({
+      freshnessState: "recent",
+      validationState: "schema_validated"
+    })),
+    /requires freshness validation/
+  );
+
+  assert.strictEqual(
+    assertReplayRecordFreshForUse(makeReplayRecord({
+      freshnessState: "recent",
+      validationState: "freshness_validated"
+    })),
+    true
+  );
+}
+
+function testReplayStoreSideEffectReplayBlocked() {
+  const invalid = validateReplayRecord(makeReplayRecord({
+    sideEffectLevel: "filesystem_write",
+    autoReplay: true
+  }));
+
+  assert.strictEqual(invalid.valid, false);
+  assert.ok(invalid.errors.some(error => error.includes("automatically replayable")));
+
+  const record = createReplayRecord(makeReplayRecord({
+    recordId: "side_effect_record",
+    sideEffectLevel: "filesystem_write"
+  }));
+
+  const classification = classifyReplayRecordAuthority(record);
+  assert.strictEqual(classification.canReplaySideEffectsAutomatically, false);
+  assert.strictEqual(assertReplayRecordNotProof(record), true);
+}
+
+function testReplayStorePersistenceSchema() {
+  const original = createReplayRecord(makeReplayRecord({
+    recordId: "round_trip_record",
+    validationState: "evidence_gate_validated",
+    authorityState: "validated_evidence_reference",
+    freshnessState: "current_run"
+  }));
+
+  const serialized = JSON.stringify(original);
+  const parsed = JSON.parse(serialized);
+  const recreated = createReplayRecord(parsed);
+
+  assert.strictEqual(recreated.recordId, "round_trip_record");
+  assert.strictEqual(recreated.authorityState, "validated_evidence_reference");
+  assert.strictEqual(assertReplayRecordFreshForUse(recreated), true);
+
+  const invalid = validateReplayRecord({
+    ...parsed,
+    permissionGrant: true
+  });
+
+  assert.strictEqual(invalid.valid, false);
+  assert.ok(invalid.errors.some(error => error.includes("must not grant permissions")));
 }

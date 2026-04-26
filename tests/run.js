@@ -1,5 +1,16 @@
 const assert = require("assert");
 const {
+  SIDE_EFFECT_SANDBOX_LEVELS,
+  SIDE_EFFECT_SANDBOX_STATUSES,
+  SIDE_EFFECT_SANDBOX_BLOCKED_REASONS,
+  SIDE_EFFECT_SANDBOX_REQUIRED_GATES,
+  createSideEffectSandboxPolicy,
+  validateSideEffectSandboxPolicy,
+  classifySideEffectSandboxRequest,
+  assertSideEffectSandboxBlocksExecution,
+  summarizeSideEffectSandboxPolicy
+} = require("../core/sideEffectSandbox");
+const {
   EXECUTION_ADAPTER_TYPES,
   EXECUTION_ADAPTER_STATUSES,
   EXECUTION_ADAPTER_SIDE_EFFECT_LEVELS,
@@ -3684,6 +3695,11 @@ async function run() {
   testExecutionAdapterBlocksExecutableRequests();
   testExecutionAdapterRequiresGateSpine();
   testExecutionAdapterNoRuntimeExports();
+  testSideEffectSandboxPolicyValidation();
+  testSideEffectSandboxClassifiesWithoutExecuting();
+  testSideEffectSandboxBlocksMutationAndProcessExecution();
+  testSideEffectSandboxRequiresGateSpine();
+  testSideEffectSandboxNoRuntimeExports();
   testContextExporterAuthorityRuntime();
   testFallbackRouting();
   testPythonSandboxSafeExecution();
@@ -4929,4 +4945,149 @@ function testExecutionAdapterNoRuntimeExports() {
   assert.strictEqual(summary.canCommit, false);
   assert.strictEqual(summary.canGrantPermissions, false);
   assert.strictEqual(summary.canUseModelOutputAsAuthority, false);
+}
+const SIDE_EFFECT_SANDBOX_REQUIRED_GATES_TEST = [
+  "RuntimeIntegrationBoundary",
+  "PermissionGate",
+  "ExecutionAdapterRegistry",
+  "ToolCapabilityRegistry",
+  "EvidenceGate",
+  "ReplayStore",
+  "CommitGate"
+];
+
+function makeSideEffectSandboxPolicy(overrides = {}) {
+  return {
+    sandboxId: "side_effect_sandbox_test",
+    source: "test_harness",
+    sideEffectLevel: "metadata_only",
+    targetCapability: "metadata",
+    requiredGates: SIDE_EFFECT_SANDBOX_REQUIRED_GATES_TEST,
+    sandboxRequired: false,
+    executionAllowed: false,
+    filesystemMutationAllowed: false,
+    processExecutionAllowed: false,
+    blockedReasons: [],
+    ...overrides
+  };
+}
+
+function testSideEffectSandboxPolicyValidation() {
+  assert.ok(SIDE_EFFECT_SANDBOX_LEVELS.includes("filesystem_write"));
+  assert.ok(SIDE_EFFECT_SANDBOX_STATUSES.includes("blocked"));
+  assert.ok(SIDE_EFFECT_SANDBOX_BLOCKED_REASONS.includes("sandbox_execution_blocked"));
+  assert.ok(SIDE_EFFECT_SANDBOX_REQUIRED_GATES.includes("ExecutionAdapterRegistry"));
+
+  const missing = validateSideEffectSandboxPolicy({});
+  assert.strictEqual(missing.valid, false);
+  assert.ok(missing.errors.some(error => error.includes("missing required field")));
+
+  const invalid = validateSideEffectSandboxPolicy(makeSideEffectSandboxPolicy({
+    sideEffectLevel: "not_real",
+    status: "not_real",
+    blockedReasons: ["not_real"]
+  }));
+
+  assert.strictEqual(invalid.valid, false);
+  assert.ok(invalid.errors.some(error => error.includes("unknown sideEffectLevel")));
+  assert.ok(invalid.errors.some(error => error.includes("unknown status")));
+  assert.ok(invalid.errors.some(error => error.includes("unknown blockedReason")));
+
+  const executable = validateSideEffectSandboxPolicy(makeSideEffectSandboxPolicy({
+    executionAllowed: true
+  }));
+
+  assert.strictEqual(executable.valid, false);
+  assert.ok(executable.errors.some(error => error.includes("executionAllowed must be false")));
+}
+
+function testSideEffectSandboxClassifiesWithoutExecuting() {
+  const metadata = classifySideEffectSandboxRequest(makeSideEffectSandboxPolicy());
+  const summary = summarizeSideEffectSandboxPolicy(metadata.policy);
+
+  assert.strictEqual(metadata.status, "metadata_only");
+  assert.strictEqual(metadata.executionAllowed, false);
+  assert.strictEqual(metadata.filesystemMutationAllowed, false);
+  assert.strictEqual(metadata.processExecutionAllowed, false);
+  assert.strictEqual(metadata.canExecuteEffects, false);
+  assert.strictEqual(summary.executionAllowed, false);
+  assert.strictEqual(summary.canExecuteProcesses, false);
+
+  const created = createSideEffectSandboxPolicy(makeSideEffectSandboxPolicy());
+  assert.strictEqual(created.executionAllowed, false);
+}
+
+function testSideEffectSandboxBlocksMutationAndProcessExecution() {
+  for (const [sideEffectLevel, expectedReason] of [
+    ["filesystem_write", "filesystem_write_blocked"],
+    ["process_execution", "process_execution_blocked"],
+    ["code_execution", "code_execution_blocked"],
+    ["git_execution", "git_execution_blocked"],
+    ["model_execution", "model_execution_blocked"],
+    ["permission_grant", "permission_grant_blocked"]
+  ]) {
+    const classified = classifySideEffectSandboxRequest(makeSideEffectSandboxPolicy({
+      sideEffectLevel,
+      targetCapability: sideEffectLevel
+    }));
+
+    assert.strictEqual(classified.status, "blocked");
+    assert.strictEqual(classified.executionAllowed, false);
+    assert.strictEqual(classified.filesystemMutationAllowed, false);
+    assert.strictEqual(classified.processExecutionAllowed, false);
+    assert.ok(classified.policy.blockedReasons.includes(expectedReason));
+    assert.ok(classified.policy.blockedReasons.includes("sandbox_execution_blocked"));
+    assert.strictEqual(assertSideEffectSandboxBlocksExecution(classified.policy), true);
+  }
+
+  const authority = validateSideEffectSandboxPolicy(makeSideEffectSandboxPolicy({
+    modelOutputUsedAsAuthority: true
+  }));
+
+  assert.strictEqual(authority.valid, false);
+  assert.ok(authority.errors.some(error => error.includes("model output")));
+}
+
+function testSideEffectSandboxRequiresGateSpine() {
+  const missingGate = validateSideEffectSandboxPolicy(makeSideEffectSandboxPolicy({
+    requiredGates: SIDE_EFFECT_SANDBOX_REQUIRED_GATES_TEST.filter(gate => gate !== "ExecutionAdapterRegistry")
+  }));
+
+  assert.strictEqual(missingGate.valid, false);
+  assert.ok(missingGate.errors.some(error => error.includes("missing required gate: ExecutionAdapterRegistry")));
+
+  const created = createSideEffectSandboxPolicy(makeSideEffectSandboxPolicy());
+  assert.strictEqual(created.requiredGates.length, SIDE_EFFECT_SANDBOX_REQUIRED_GATES_TEST.length);
+}
+
+function testSideEffectSandboxNoRuntimeExports() {
+  const moduleExports = require("../core/sideEffectSandbox");
+
+  for (const forbidden of [
+    "executeTool",
+    "runTool",
+    "writeFile",
+    "runGit",
+    "gitCommit",
+    "commit",
+    "grantPermission",
+    "executeCommand",
+    "autoFix",
+    "executeSandbox",
+    "runSandbox"
+  ]) {
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(moduleExports, forbidden), false);
+  }
+
+  const classified = classifySideEffectSandboxRequest(makeSideEffectSandboxPolicy({
+    sideEffectLevel: "process_execution"
+  }));
+
+  assert.strictEqual(classified.canExecuteEffects, false);
+  assert.strictEqual(classified.canMutateFilesystem, false);
+  assert.strictEqual(classified.canExecuteProcesses, false);
+  assert.strictEqual(classified.canRunGit, false);
+  assert.strictEqual(classified.canCommit, false);
+  assert.strictEqual(classified.canGrantPermissions, false);
+  assert.strictEqual(classified.canUseModelOutputAsAuthority, false);
 }

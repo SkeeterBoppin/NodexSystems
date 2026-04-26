@@ -1,5 +1,17 @@
 const assert = require("assert");
 const {
+  EXECUTION_ADAPTER_TYPES,
+  EXECUTION_ADAPTER_STATUSES,
+  EXECUTION_ADAPTER_SIDE_EFFECT_LEVELS,
+  EXECUTION_ADAPTER_BLOCKED_REASONS,
+  createExecutionAdapterPolicy,
+  validateExecutionAdapterPolicy,
+  createExecutionAdapterRegistry,
+  classifyExecutionAdapterRequest,
+  assertExecutionAdapterNotExecutable,
+  summarizeExecutionAdapterRegistry
+} = require("../core/executionAdapterRegistry");
+const {
   PERMISSION_GATE_SCOPES,
   PERMISSION_GATE_STATUSES,
   PERMISSION_GATE_DECISIONS,
@@ -3667,6 +3679,11 @@ async function run() {
   testPermissionGateBlocksRuntimeSensitiveScopes();
   testPermissionGateRequiresEvidenceAndHumanState();
   testPermissionGateNoRuntimeExports();
+  testExecutionAdapterPolicyValidation();
+  testExecutionAdapterRegistryMetadataOnly();
+  testExecutionAdapterBlocksExecutableRequests();
+  testExecutionAdapterRequiresGateSpine();
+  testExecutionAdapterNoRuntimeExports();
   testContextExporterAuthorityRuntime();
   testFallbackRouting();
   testPythonSandboxSafeExecution();
@@ -4774,4 +4791,142 @@ function testPermissionGateNoRuntimeExports() {
 
   const created = createPermissionRequest(makePermissionGateRequest());
   assert.strictEqual(created.permissionGranted, false);
+}
+const EXECUTION_ADAPTER_REQUIRED_GATES_TEST = [
+  "RuntimeIntegrationBoundary",
+  "PermissionGate",
+  "ToolCapabilityRegistry",
+  "EvidenceGate",
+  "ReplayStore",
+  "CommitGate"
+];
+
+function makeExecutionAdapterPolicy(overrides = {}) {
+  return {
+    adapterId: "execution_adapter_test",
+    adapterType: "metadata",
+    targetCapability: "metadata",
+    sideEffectLevel: "metadata_only",
+    requiredGates: EXECUTION_ADAPTER_REQUIRED_GATES_TEST,
+    defaultPolicy: "metadata_only",
+    runtimeExecutionAllowed: false,
+    blockedReasons: [],
+    ...overrides
+  };
+}
+
+function testExecutionAdapterPolicyValidation() {
+  assert.ok(EXECUTION_ADAPTER_TYPES.includes("tool"));
+  assert.ok(EXECUTION_ADAPTER_STATUSES.includes("blocked"));
+  assert.ok(EXECUTION_ADAPTER_SIDE_EFFECT_LEVELS.includes("git_execution"));
+  assert.ok(EXECUTION_ADAPTER_BLOCKED_REASONS.includes("adapter_execution_blocked"));
+
+  const missing = validateExecutionAdapterPolicy({});
+  assert.strictEqual(missing.valid, false);
+  assert.ok(missing.errors.some(error => error.includes("missing required field")));
+
+  const invalid = validateExecutionAdapterPolicy(makeExecutionAdapterPolicy({
+    adapterType: "not_real",
+    sideEffectLevel: "not_real",
+    defaultPolicy: "not_real",
+    blockedReasons: ["not_real"]
+  }));
+
+  assert.strictEqual(invalid.valid, false);
+  assert.ok(invalid.errors.some(error => error.includes("unknown adapterType")));
+  assert.ok(invalid.errors.some(error => error.includes("unknown sideEffectLevel")));
+  assert.ok(invalid.errors.some(error => error.includes("unknown defaultPolicy")));
+  assert.ok(invalid.errors.some(error => error.includes("unknown blockedReason")));
+
+  const executable = validateExecutionAdapterPolicy(makeExecutionAdapterPolicy({
+    runtimeExecutionAllowed: true
+  }));
+
+  assert.strictEqual(executable.valid, false);
+  assert.ok(executable.errors.some(error => error.includes("runtimeExecutionAllowed must be false")));
+}
+
+function testExecutionAdapterRegistryMetadataOnly() {
+  const policy = createExecutionAdapterPolicy(makeExecutionAdapterPolicy());
+  const registry = createExecutionAdapterRegistry([policy]);
+  const summary = summarizeExecutionAdapterRegistry(registry);
+
+  assert.strictEqual(registry.metadataOnly, true);
+  assert.strictEqual(registry.adapterExecutionAllowed, false);
+  assert.strictEqual(registry.runtimeIntegrationAllowed, false);
+  assert.strictEqual(registry.getPolicy("execution_adapter_test").adapterId, "execution_adapter_test");
+  assert.strictEqual(summary.metadataOnly, true);
+  assert.strictEqual(summary.adapterExecutionAllowed, false);
+  assert.strictEqual(summary.runtimeIntegrationAllowed, false);
+  assert.strictEqual(summary.policyCount, 1);
+}
+
+function testExecutionAdapterBlocksExecutableRequests() {
+  for (const [adapterType, sideEffectLevel, expectedReason] of [
+    ["tool", "process_execution", "tool_adapter_blocked"],
+    ["file", "filesystem_write", "file_adapter_blocked"],
+    ["command", "process_execution", "command_adapter_blocked"],
+    ["git", "git_execution", "git_adapter_blocked"],
+    ["model", "model_execution", "model_adapter_blocked"],
+    ["runtime", "unknown", "runtime_integration_blocked"]
+  ]) {
+    const classified = classifyExecutionAdapterRequest({
+      adapterId: adapterType + "_adapter",
+      adapterType,
+      targetCapability: adapterType,
+      sideEffectLevel,
+      requiredGates: EXECUTION_ADAPTER_REQUIRED_GATES_TEST,
+      evidenceState: "unverified"
+    });
+
+    assert.strictEqual(classified.status, "blocked");
+    assert.strictEqual(classified.adapterExecutionAllowed, false);
+    assert.strictEqual(classified.runtimeExecutionAllowed, false);
+    assert.ok(classified.policy.blockedReasons.includes(expectedReason));
+    assert.strictEqual(assertExecutionAdapterNotExecutable(classified.policy), true);
+  }
+}
+
+function testExecutionAdapterRequiresGateSpine() {
+  const missingGate = validateExecutionAdapterPolicy(makeExecutionAdapterPolicy({
+    requiredGates: EXECUTION_ADAPTER_REQUIRED_GATES_TEST.filter(gate => gate !== "PermissionGate")
+  }));
+
+  assert.strictEqual(missingGate.valid, false);
+  assert.ok(missingGate.errors.some(error => error.includes("missing required gate: PermissionGate")));
+
+  const created = createExecutionAdapterPolicy(makeExecutionAdapterPolicy());
+  assert.strictEqual(created.requiredGates.length, EXECUTION_ADAPTER_REQUIRED_GATES_TEST.length);
+}
+
+function testExecutionAdapterNoRuntimeExports() {
+  const moduleExports = require("../core/executionAdapterRegistry");
+
+  for (const forbidden of [
+    "executeTool",
+    "runTool",
+    "writeFile",
+    "runGit",
+    "gitCommit",
+    "commit",
+    "grantPermission",
+    "executeCommand",
+    "autoFix",
+    "executeAdapter",
+    "runAdapter"
+  ]) {
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(moduleExports, forbidden), false);
+  }
+
+  const registry = createExecutionAdapterRegistry([makeExecutionAdapterPolicy()]);
+  const summary = summarizeExecutionAdapterRegistry(registry);
+
+  assert.strictEqual(summary.canExecuteAdapters, false);
+  assert.strictEqual(summary.canExecuteTools, false);
+  assert.strictEqual(summary.canWriteFiles, false);
+  assert.strictEqual(summary.canRunCommands, false);
+  assert.strictEqual(summary.canRunGit, false);
+  assert.strictEqual(summary.canCommit, false);
+  assert.strictEqual(summary.canGrantPermissions, false);
+  assert.strictEqual(summary.canUseModelOutputAsAuthority, false);
 }

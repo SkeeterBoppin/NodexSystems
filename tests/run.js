@@ -52,6 +52,15 @@ const {
   appendContextLedgerRecord,
   validateContextLedger
 } = require("../core/contextLedger");
+
+const {
+  createValidityClaim,
+  validateValidityClaim,
+  createValidityGraph,
+  validateValidityGraph,
+  appendValidityClaim,
+  resolveValidityGraph
+} = require("../core/validityGraph");
 const {
   createRepairRecommendation,
   validateRepairRecommendation
@@ -2914,6 +2923,166 @@ function testTranscriptEvidenceAdapterRuntime() {
   }
 }
 
+function buildValidityClaimInput(mutate) {
+  const input = {
+    version: 1,
+    claimId: " context_ledger_v1_committed ",
+    subject: {
+      type: "seam",
+      id: " context_ledger_v1 "
+    },
+    predicate: "committed",
+    status: "active",
+    authority: {
+      kind: "commit"
+    },
+    evidence: [
+      {
+        kind: "git",
+        subject: "172a938",
+        result: "pass",
+        summary: "ContextLedger v1 was introduced by commit 172a938"
+      },
+      {
+        kind: "test",
+        subject: "tests/run.js",
+        result: "pass",
+        summary: "Full Nodex test harness passed"
+      }
+    ],
+    supersedes: ["wrong_context_ledger_filesystem_seam"],
+    contradicts: [],
+    blocks: ["rerun_context_ledger_filesystem_record"],
+    summary: "ContextLedger v1 is committed as pure runtime logic"
+  };
+
+  if (typeof mutate === "function") {
+    mutate(input);
+  }
+
+  return input;
+}
+
+function buildStaleValidityClaimInput() {
+  return {
+    version: 1,
+    claimId: "wrong_context_ledger_filesystem_seam",
+    subject: {
+      type: "decision",
+      id: "wrong_context_ledger_filesystem_seam"
+    },
+    predicate: "superseded",
+    status: "stale",
+    authority: {
+      kind: "inspection"
+    },
+    evidence: [
+      {
+        kind: "inspection",
+        subject: "context_ledger_module_shape_inspection",
+        result: "pass",
+        summary: "Filesystem-ledger interpretation was rejected after module-shape proof"
+      }
+    ],
+    supersedes: [],
+    contradicts: [],
+    blocks: [],
+    summary: "ContextLedger must not be implemented as filesystem persistence"
+  };
+}
+
+function testValidityGraphRuntime() {
+  {
+    const input = buildValidityClaimInput();
+    const snapshot = JSON.parse(JSON.stringify(input));
+    const claim = createValidityClaim(input);
+
+    assert.strictEqual(claim.claimId, "context_ledger_v1_committed");
+    assert.strictEqual(claim.subject.id, "context_ledger_v1");
+    assert.strictEqual(claim.authority.kind, "commit");
+    assert.strictEqual(claim.authority.rank, 100);
+    assert.strictEqual(validateValidityClaim(input), true);
+    assert.deepStrictEqual(input, snapshot);
+  }
+
+  {
+    const stale = buildStaleValidityClaimInput();
+    const active = buildValidityClaimInput();
+    const graph = createValidityGraph({
+      version: 1,
+      graphId: "nodex_validity",
+      claims: [stale, active]
+    });
+
+    assert.strictEqual(validateValidityGraph(graph), true);
+    assert.strictEqual(graph.claims.length, 2);
+
+    const resolved = resolveValidityGraph(graph);
+    assert.deepStrictEqual(resolved.activeClaimIds, ["context_ledger_v1_committed"]);
+    assert.deepStrictEqual(resolved.staleClaimIds, ["wrong_context_ledger_filesystem_seam"]);
+    assert.deepStrictEqual(resolved.supersededClaimIds, ["wrong_context_ledger_filesystem_seam"]);
+    assert.deepStrictEqual(resolved.blockedActionIds, ["rerun_context_ledger_filesystem_record"]);
+    assert.deepStrictEqual(resolved.authorityOrder, [
+      "context_ledger_v1_committed",
+      "wrong_context_ledger_filesystem_seam"
+    ]);
+  }
+
+  {
+    const input = buildValidityClaimInput();
+    input.claimId = "ContextLedger";
+    assert.throws(() => createValidityClaim(input), /claimId/i);
+  }
+
+  {
+    const input = buildValidityClaimInput();
+    input.authority.kind = "chat_summary";
+    assert.throws(() => createValidityClaim(input), /authority\.kind/i);
+  }
+
+  {
+    const input = buildValidityClaimInput();
+    input.evidence[0].subject = "../secret.txt";
+    assert.throws(() => createValidityClaim(input), /subject|\.\./i);
+  }
+
+  {
+    const input = buildValidityClaimInput();
+    input.supersedes = ["missing_claim"];
+    assert.throws(() => createValidityGraph({
+      version: 1,
+      graphId: "nodex_validity",
+      claims: [input]
+    }), /supersedes target/i);
+  }
+
+  {
+    const stale = buildStaleValidityClaimInput();
+    const active = buildValidityClaimInput();
+    const duplicate = buildValidityClaimInput();
+
+    assert.throws(() => createValidityGraph({
+      version: 1,
+      graphId: "nodex_validity",
+      claims: [stale, active, duplicate]
+    }), /claimId|unique/i);
+  }
+
+  {
+    const stale = buildStaleValidityClaimInput();
+    const graph = createValidityGraph({
+      version: 1,
+      graphId: "nodex_validity",
+      claims: [stale]
+    });
+
+    const appended = appendValidityClaim(graph, buildValidityClaimInput());
+
+    assert.strictEqual(appended.claims.length, 2);
+    assert.strictEqual(graph.claims.length, 1);
+    assert.throws(() => appendValidityClaim(appended, buildValidityClaimInput()), /claimId|unique/i);
+  }
+}
 function testContextExporterAuthorityRuntime() {
   const {
     buildSnapshot,
@@ -3352,6 +3521,7 @@ async function run() {
   testEvidenceGateRuntime();
   testTranscriptParserRuntime();
   testTranscriptEvidenceAdapterRuntime();
+  testValidityGraphRuntime();
   testContextExporterAuthorityRuntime();
   testFallbackRouting();
   testPythonSandboxSafeExecution();

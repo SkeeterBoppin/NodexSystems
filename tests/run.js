@@ -28,7 +28,11 @@ const {
   formatLearningForPrompt
 } = require("../evolution/learning");
 const { scoreExecutionMetrics } = require("../evolution/scorer");
-const { selectBestCandidate } = require("../evolution/evolver");
+const {
+  candidateRoot,
+  candidatePaths,
+  selectBestCandidate
+} = require("../evolution/evolver");
 const {
   createTaskGraph,
   validateTaskGraph,
@@ -3191,6 +3195,25 @@ function testAdaptiveExplorationAndPublishConfidence() {
   assert.strictEqual(confidence.threshold, 31);
 }
 
+function testEvolutionCandidateWorkspaceLocation() {
+  const probe = "strict_loader_reference_patch_probe";
+  const root = candidateRoot(probe);
+  const paths = candidatePaths(probe, 1);
+  const repoRoot = path.resolve(__dirname, "..").replace(/\\/g, "/");
+  const normalizedRoot = root.replace(/\\/g, "/");
+  const normalizedWorkspace = paths.sandboxRoot.replace(/\\/g, "/");
+  const forbiddenSegment = ["Sand", "box"].join("");
+
+  assert.strictEqual(normalizedRoot.startsWith(`${repoRoot}/${forbiddenSegment}/`), false);
+  assert.strictEqual(normalizedRoot.includes("nodex-evolution-candidates"), true);
+  assert.strictEqual(normalizedWorkspace.includes("/workspace"), true);
+  assert.strictEqual(normalizedWorkspace.includes(`/${forbiddenSegment}`), false);
+
+  fs.rmSync(path.join(os.tmpdir(), "nodex-evolution-candidates", `attempt-${probe}`), {
+    recursive: true,
+    force: true
+  });
+}
 function testBestCandidateSelection() {
   const best = selectBestCandidate([
     { candidate: 1, strategy: "explore_variation", status: "error", score: 40, weight: 1 },
@@ -3318,6 +3341,7 @@ async function run() {
   testStrategyPerformanceAndSelection();
   testStructuralPatternExtractionAndCandidates();
   testAdaptiveExplorationAndPublishConfidence();
+  testEvolutionCandidateWorkspaceLocation();
   testBestCandidateSelection();
 
   console.log("All Nodex tests passed");

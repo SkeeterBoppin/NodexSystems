@@ -1,6 +1,7 @@
 const { randomUUID } = require("crypto");
 const fs = require("fs");
 const path = require("path");
+const os = require("os");
 const { readText, appendText, writeText, readJson, readMemoryText, ROOT_DIR } = require("../memory/memoryStore");
 const { generate } = require("../llm/ollamaClient");
 const { buildEvolutionPrompt } = require("./promptBuilder");
@@ -32,7 +33,7 @@ function readExecutionArtifact(fileName, sandboxRoot) {
 }
 
 function candidateRoot(attempt) {
-  const dir = path.join(ROOT_DIR, "Sandbox", "candidates", `attempt-${attempt}`);
+  const dir = path.join(os.tmpdir(), "nodex-evolution-candidates", `attempt-${attempt}`);
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -40,7 +41,7 @@ function candidateRoot(attempt) {
 function candidatePaths(attempt, candidate) {
   const root = candidateRoot(attempt);
   const candidateDir = path.join(root, `candidate-${candidate}`);
-  const sandboxRoot = path.join(candidateDir, "Sandbox");
+  const sandboxRoot = path.join(candidateDir, "workspace");
   fs.mkdirSync(sandboxRoot, { recursive: true });
 
   return {
@@ -493,4 +494,3 @@ module.exports = {
   rememberAttempt,
   statusRank
 };
-

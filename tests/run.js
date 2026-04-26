@@ -1,4 +1,14 @@
 const assert = require("assert");
+const {
+  CONTEXT_USE_SURFACES,
+  createContextSurface,
+  validateContextSurface,
+  createContextUseGraph,
+  getContextSurface,
+  canUseContextFor,
+  assertContextUsageAllowed,
+  classifyContextUsage
+} = require("../core/contextUseGraph");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -3522,6 +3532,11 @@ async function run() {
   testTranscriptParserRuntime();
   testTranscriptEvidenceAdapterRuntime();
   testValidityGraphRuntime();
+  testContextUseGraphSurfaceValidation();
+  testContextUseGraphUsageQueries();
+  testContextUseGraphMemoryCannotProve();
+  testContextUseGraphGeneratedArtifactsDeauthorized();
+  testContextUseGraphModelOutputProposalOnly();
   testContextExporterAuthorityRuntime();
   testFallbackRouting();
   testPythonSandboxSafeExecution();
@@ -3547,3 +3562,73 @@ run().catch(err => {
   console.error(err);
   process.exitCode = 1;
 });
+function testContextUseGraphSurfaceValidation() {
+  assert.strictEqual(CONTEXT_USE_SURFACES.length, 25);
+
+  const missing = validateContextSurface({});
+  assert.strictEqual(missing.valid, false);
+  assert.ok(missing.errors.some(error => error.includes("missing required field")));
+
+  const agents = CONTEXT_USE_SURFACES.find(surface => surface.path === "AGENTS.md");
+  const invalidOverlap = validateContextSurface({
+    ...agents,
+    allowedUsage: ["planning", "proof"],
+    blockedUsage: ["proof"]
+  });
+
+  assert.strictEqual(invalidOverlap.valid, false);
+  assert.ok(invalidOverlap.errors.some(error => error.includes("overlap")));
+
+  const created = createContextSurface(agents);
+  assert.strictEqual(created.path, "AGENTS.md");
+}
+
+function testContextUseGraphUsageQueries() {
+  const graph = createContextUseGraph();
+  const agents = getContextSurface(graph, "AGENTS.md");
+
+  assert.ok(agents);
+  assert.strictEqual(canUseContextFor(agents, "planning"), true);
+  assert.strictEqual(canUseContextFor(agents, "proof"), false);
+
+  assert.throws(
+    () => assertContextUsageAllowed(agents, "proof"),
+    /explicitly blocked/
+  );
+
+  const classification = classifyContextUsage(agents, "routing_constraint");
+  assert.strictEqual(classification.allowed, true);
+  assert.strictEqual(classification.blocked, false);
+}
+
+function testContextUseGraphMemoryCannotProve() {
+  const graph = createContextUseGraph();
+  const memory = getContextSurface(graph, "memory/SYSTEM_RULES.MD");
+
+  assert.ok(memory);
+  assert.strictEqual(canUseContextFor(memory, "continuity"), true);
+  assert.strictEqual(canUseContextFor(memory, "proof"), false);
+  assert.strictEqual(canUseContextFor(memory, "live_repo_override"), false);
+}
+
+function testContextUseGraphGeneratedArtifactsDeauthorized() {
+  const graph = createContextUseGraph();
+  const snapshot = getContextSurface(graph, "CONTEXT_SNAPSHOT.json");
+
+  assert.ok(snapshot);
+  assert.strictEqual(snapshot.validationState, "deauthorized");
+  assert.strictEqual(canUseContextFor(snapshot, "diagnostic_inspection_only"), true);
+  assert.strictEqual(canUseContextFor(snapshot, "active_instruction"), false);
+  assert.strictEqual(canUseContextFor(snapshot, "proof"), false);
+}
+
+function testContextUseGraphModelOutputProposalOnly() {
+  const graph = createContextUseGraph();
+  const evolution = getContextSurface(graph, "evolution/evolver.js");
+
+  assert.ok(evolution);
+  assert.strictEqual(evolution.validationState, "proposal_only");
+  assert.strictEqual(canUseContextFor(evolution, "candidate_generation"), true);
+  assert.strictEqual(canUseContextFor(evolution, "direct_context_promotion"), false);
+  assert.strictEqual(canUseContextFor(evolution, "proof"), false);
+}

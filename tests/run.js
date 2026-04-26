@@ -47,6 +47,10 @@ const {
   validateAgentHandoffPacket
 } = require("../core/agentHandoffPacket");
 const {
+  createAgentHandoffBridgePacket,
+  validateAgentHandoffBridgePacket
+} = require("../core/agentHandoffBridge");
+const {
   createEvidenceGateRecord,
   validateEvidenceGateRecord
 } = require("../core/evidenceGate");
@@ -1391,6 +1395,64 @@ function buildAgentHandoffPacketInput() {
   };
 }
 
+function buildAgentHandoffBridgeInput(mutate) {
+  const input = {
+    taskGraph: {
+      version: 1,
+      graphId: "agent_handoff_bridge_graph",
+      mode: "apply",
+      allowedFiles: [" core\\ ", " tests\\run.js "],
+      forbiddenFiles: [" evolution\\ "],
+      steps: [
+        {
+          id: "inspect_bridge",
+          type: "inspect",
+          title: "Inspect bridge seam",
+          files: [" tests\\run.js "],
+          status: "pending",
+          validation: {
+            required: false,
+            gates: []
+          },
+          evidence: []
+        },
+        {
+          id: "implement_bridge",
+          type: "edit",
+          title: "Implement bridge",
+          files: [" core\\agentHandoffBridge.js ", " tests\\run.js "],
+          status: "pending",
+          validation: {
+            required: true,
+            gates: ["syntax"]
+          },
+          evidence: []
+        },
+        {
+          id: "validate_bridge",
+          type: "validate",
+          title: "Validate bridge",
+          files: [" tests\\run.js "],
+          status: "pending",
+          validation: {
+            required: true,
+            gates: ["test"]
+          },
+          evidence: []
+        }
+      ]
+    },
+    title: " Implement bridge ",
+    instructions: [" Create packet from current graph step ", " Preserve deterministic structure "]
+  };
+
+  if (typeof mutate === "function") {
+    mutate(input);
+  }
+
+  return input;
+}
+
 function testAgentHandoffPacketRuntime() {
   {
     const input = buildAgentHandoffPacketInput();
@@ -1578,6 +1640,189 @@ function testAgentHandoffPacketRuntime() {
       stepId: "implement_module"
     };
     assert.throws(() => createAgentHandoffPacket(invalidIdInput), /taskGraph\.graphId|taskGraph/i);
+  }
+}
+
+function testAgentHandoffBridgeRuntime() {
+  {
+    const input = buildAgentHandoffBridgeInput();
+    const packet = createAgentHandoffBridgePacket(input);
+
+    assert.deepStrictEqual(packet, {
+      version: 1,
+      packetId: "agent_handoff_bridge_graph_inspect_bridge_handoff_packet",
+      mode: "inspect_only",
+      type: "inspect",
+      title: "Implement bridge",
+      instructions: ["Create packet from current graph step", "Preserve deterministic structure"],
+      allowedFiles: ["core/", "tests/run.js"],
+      forbiddenFiles: ["evolution/"],
+      files: ["tests/run.js"],
+      validation: {
+        required: false,
+        gates: []
+      },
+      expectedDirtyState: {
+        files: []
+      },
+      taskGraph: {
+        graphId: "agent_handoff_bridge_graph",
+        stepId: "inspect_bridge"
+      }
+    });
+  }
+
+  {
+    const input = buildAgentHandoffBridgeInput(bridgeInput => {
+      bridgeInput.taskGraph.steps[0].status = "passed";
+    });
+    const packet = createAgentHandoffBridgePacket(input);
+
+    assert.strictEqual(packet.mode, "apply");
+    assert.strictEqual(packet.type, "edit");
+    assert.deepStrictEqual(packet.files, ["core/agentHandoffBridge.js", "tests/run.js"]);
+    assert.deepStrictEqual(packet.expectedDirtyState.files, ["core/agentHandoffBridge.js", "tests/run.js"]);
+    assert.deepStrictEqual(packet.taskGraph, {
+      graphId: "agent_handoff_bridge_graph",
+      stepId: "implement_bridge"
+    });
+  }
+
+  {
+    const input = buildAgentHandoffBridgeInput(bridgeInput => {
+      bridgeInput.taskGraph.steps[0].status = "passed";
+      bridgeInput.taskGraph.steps[1].status = "passed";
+      bridgeInput.taskGraph.steps[1].evidence = [
+        createEvidence("syntax", "pass", {
+          subject: "core/agentHandoffBridge.js",
+          summary: "syntax check passed for core/agentHandoffBridge.js"
+        })
+      ];
+    });
+    const packet = createAgentHandoffBridgePacket(input);
+
+    assert.strictEqual(packet.mode, "validate_only");
+    assert.strictEqual(packet.type, "validate");
+    assert.deepStrictEqual(packet.files, ["tests/run.js"]);
+    assert.deepStrictEqual(packet.expectedDirtyState.files, []);
+    assert.deepStrictEqual(packet.taskGraph, {
+      graphId: "agent_handoff_bridge_graph",
+      stepId: "validate_bridge"
+    });
+  }
+
+  {
+    const input = buildAgentHandoffBridgeInput(bridgeInput => {
+      bridgeInput.taskGraph.steps[0].status = "passed";
+    });
+    assert.strictEqual(validateAgentHandoffBridgePacket(input), true);
+  }
+
+  {
+    const input = buildAgentHandoffBridgeInput(bridgeInput => {
+      bridgeInput.taskGraph.steps[0].status = "passed";
+    });
+    const packet = createAgentHandoffBridgePacket(input);
+
+    assert.strictEqual(validateAgentHandoffPacket(packet), true);
+  }
+
+  {
+    const input = buildAgentHandoffBridgeInput(bridgeInput => {
+      bridgeInput.taskGraph.steps[0].status = "passed";
+    });
+    const snapshot = JSON.parse(JSON.stringify(input));
+    const packet = createAgentHandoffBridgePacket(input);
+
+    assert.deepStrictEqual(input, snapshot);
+
+    packet.files[0] = "tests/run.js";
+    assert.strictEqual(input.taskGraph.steps[1].files[0], " core\\agentHandoffBridge.js ");
+  }
+
+  {
+    const input = buildAgentHandoffBridgeInput();
+    input.extra = true;
+    assert.throws(() => createAgentHandoffBridgePacket(input), /unknown/i);
+  }
+
+  {
+    const missingTitleInput = buildAgentHandoffBridgeInput();
+    delete missingTitleInput.title;
+    assert.throws(() => createAgentHandoffBridgePacket(missingTitleInput), /title/i);
+
+    const emptyTitleInput = buildAgentHandoffBridgeInput();
+    emptyTitleInput.title = "   ";
+    assert.throws(() => createAgentHandoffBridgePacket(emptyTitleInput), /title/i);
+  }
+
+  {
+    const missingInstructionsInput = buildAgentHandoffBridgeInput();
+    delete missingInstructionsInput.instructions;
+    assert.throws(() => createAgentHandoffBridgePacket(missingInstructionsInput), /instructions/i);
+
+    const emptyInstructionsInput = buildAgentHandoffBridgeInput();
+    emptyInstructionsInput.instructions = [];
+    assert.throws(() => createAgentHandoffBridgePacket(emptyInstructionsInput), /instructions/i);
+  }
+
+  {
+    const input = buildAgentHandoffBridgeInput();
+    input.stepId = "inspect-bridge";
+    assert.throws(() => createAgentHandoffBridgePacket(input), /stepId/i);
+  }
+
+  {
+    const input = buildAgentHandoffBridgeInput();
+    input.stepId = "implement_bridge";
+    assert.throws(() => createAgentHandoffBridgePacket(input), /stepId|current executable step/i);
+  }
+
+  {
+    const input = buildAgentHandoffBridgeInput(bridgeInput => {
+      bridgeInput.taskGraph.steps[0].status = "passed";
+      bridgeInput.taskGraph.steps[1].status = "passed";
+      bridgeInput.taskGraph.steps[1].evidence = [
+        createEvidence("syntax", "pass", {
+          subject: "core/agentHandoffBridge.js",
+          summary: "syntax check passed for core/agentHandoffBridge.js"
+        })
+      ];
+      bridgeInput.taskGraph.steps[2].status = "passed";
+      bridgeInput.taskGraph.steps[2].evidence = [
+        createEvidence("test", "pass", {
+          subject: "tests/run.js",
+          summary: "All Nodex tests passed"
+        })
+      ];
+    });
+    assert.throws(() => createAgentHandoffBridgePacket(input), /current executable step/i);
+  }
+
+  {
+    const input = buildAgentHandoffBridgeInput(bridgeInput => {
+      bridgeInput.taskGraph.steps[0].status = "passed";
+      bridgeInput.taskGraph.steps[1].status = "failed";
+      bridgeInput.taskGraph.steps[1].evidence = [
+        createEvidence("syntax", "fail", {
+          subject: "core/agentHandoffBridge.js",
+          summary: "syntax check failed for core/agentHandoffBridge.js",
+          data: { exitCode: 1 }
+        })
+      ];
+    });
+    assert.throws(() => createAgentHandoffBridgePacket(input), /current executable step/i);
+  }
+
+  {
+    const input = buildAgentHandoffBridgeInput(bridgeInput => {
+      bridgeInput.taskGraph.steps[0].status = "passed";
+      bridgeInput.taskGraph.steps[1].files = [
+        " core\\agentHandoffBridge.js ",
+        " core/agentHandoffBridge.js "
+      ];
+    });
+    assert.throws(() => createAgentHandoffBridgePacket(input), /duplicate|files/i);
   }
 }
 
@@ -2512,6 +2757,7 @@ async function run() {
   testDomainOntologyManifest();
   testTaskGraphRuntime();
   testAgentHandoffPacketRuntime();
+  testAgentHandoffBridgeRuntime();
   testMemoryCapsuleRuntime();
   testEvidenceGateRuntime();
   testTranscriptParserRuntime();

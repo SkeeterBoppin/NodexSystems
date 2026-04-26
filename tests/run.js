@@ -1,5 +1,17 @@
 const assert = require("assert");
 const {
+  TOOL_EXECUTION_AUDIT_RECORD_TYPES,
+  TOOL_EXECUTION_AUDIT_STATUSES,
+  TOOL_EXECUTION_AUDIT_AUTHORITY_STATES,
+  TOOL_EXECUTION_AUDIT_BLOCKED_REASONS,
+  createToolExecutionAuditRecord,
+  validateToolExecutionAuditRecord,
+  classifyToolExecutionAuditRecord,
+  assertToolExecutionAuditRecordNotProof,
+  assertToolExecutionAuditRecordNotReplayable,
+  summarizeToolExecutionAuditRecord
+} = require("../core/toolExecutionAuditLog");
+const {
   SIDE_EFFECT_SANDBOX_LEVELS,
   SIDE_EFFECT_SANDBOX_STATUSES,
   SIDE_EFFECT_SANDBOX_BLOCKED_REASONS,
@@ -3700,6 +3712,11 @@ async function run() {
   testSideEffectSandboxBlocksMutationAndProcessExecution();
   testSideEffectSandboxRequiresGateSpine();
   testSideEffectSandboxNoRuntimeExports();
+  testToolExecutionAuditRecordValidation();
+  testToolExecutionAuditRecordsAreNotProof();
+  testToolExecutionAuditRecordsAreNotReplayable();
+  testToolExecutionAuditRequiresGateSpine();
+  testToolExecutionAuditNoRuntimeExports();
   testContextExporterAuthorityRuntime();
   testFallbackRouting();
   testPythonSandboxSafeExecution();
@@ -5090,4 +5107,147 @@ function testSideEffectSandboxNoRuntimeExports() {
   assert.strictEqual(classified.canCommit, false);
   assert.strictEqual(classified.canGrantPermissions, false);
   assert.strictEqual(classified.canUseModelOutputAsAuthority, false);
+}
+const TOOL_EXECUTION_AUDIT_REQUIRED_GATES_TEST = [
+  "RuntimeIntegrationBoundary",
+  "PermissionGate",
+  "ExecutionAdapterRegistry",
+  "SideEffectSandbox",
+  "EvidenceGate",
+  "ReplayStore",
+  "CommitGate"
+];
+
+function makeToolExecutionAuditRecord(overrides = {}) {
+  return {
+    recordId: "tool_execution_audit_record_test",
+    recordType: "tool_execution_plan",
+    createdAt: "2026-04-25T00:00:00.000Z",
+    source: "test_harness",
+    toolId: "tools/commandTool.js",
+    requestedAction: "plan",
+    sideEffectLevel: "process_execution",
+    requiredGates: TOOL_EXECUTION_AUDIT_REQUIRED_GATES_TEST,
+    status: "planned",
+    authorityState: "non_authoritative",
+    replayAllowed: false,
+    permissionGrant: false,
+    runtimeExecutionAuthority: false,
+    blockedReasons: [],
+    ...overrides
+  };
+}
+
+function testToolExecutionAuditRecordValidation() {
+  assert.ok(TOOL_EXECUTION_AUDIT_RECORD_TYPES.includes("tool_execution_attempt"));
+  assert.ok(TOOL_EXECUTION_AUDIT_STATUSES.includes("blocked"));
+  assert.ok(TOOL_EXECUTION_AUDIT_AUTHORITY_STATES.includes("non_authoritative"));
+  assert.ok(TOOL_EXECUTION_AUDIT_BLOCKED_REASONS.includes("audit_record_not_proof"));
+
+  const missing = validateToolExecutionAuditRecord({});
+  assert.strictEqual(missing.valid, false);
+  assert.ok(missing.errors.some(error => error.includes("missing required field")));
+
+  const invalid = validateToolExecutionAuditRecord(makeToolExecutionAuditRecord({
+    recordType: "not_real",
+    status: "not_real",
+    authorityState: "not_real",
+    blockedReasons: ["not_real"]
+  }));
+
+  assert.strictEqual(invalid.valid, false);
+  assert.ok(invalid.errors.some(error => error.includes("unknown recordType")));
+  assert.ok(invalid.errors.some(error => error.includes("unknown status")));
+  assert.ok(invalid.errors.some(error => error.includes("unknown authorityState")));
+  assert.ok(invalid.errors.some(error => error.includes("unknown blockedReason")));
+}
+
+function testToolExecutionAuditRecordsAreNotProof() {
+  const proof = validateToolExecutionAuditRecord(makeToolExecutionAuditRecord({
+    provesCurrentRepoState: true
+  }));
+
+  assert.strictEqual(proof.valid, false);
+  assert.ok(proof.errors.some(error => error.includes("must not be proof")));
+
+  const classified = classifyToolExecutionAuditRecord(makeToolExecutionAuditRecord({
+    permissionGrant: true,
+    runtimeExecutionAuthority: true,
+    modelOutputUsedAsAuthority: true
+  }));
+
+  assert.strictEqual(classified.isProof, false);
+  assert.strictEqual(classified.permissionGrant, false);
+  assert.strictEqual(classified.runtimeExecutionAuthority, false);
+  assert.strictEqual(classified.canUseModelOutputAsAuthority, false);
+  assert.ok(classified.record.blockedReasons.includes("permission_grant_blocked"));
+  assert.ok(classified.record.blockedReasons.includes("runtime_execution_authority_blocked"));
+  assert.ok(classified.record.blockedReasons.includes("model_output_authority_blocked"));
+  assert.strictEqual(assertToolExecutionAuditRecordNotProof(classified.record), true);
+}
+
+function testToolExecutionAuditRecordsAreNotReplayable() {
+  const replay = validateToolExecutionAuditRecord(makeToolExecutionAuditRecord({
+    replayAllowed: true
+  }));
+
+  assert.strictEqual(replay.valid, false);
+  assert.ok(replay.errors.some(error => error.includes("replayAllowed must be false")));
+
+  const classified = classifyToolExecutionAuditRecord(makeToolExecutionAuditRecord({
+    replayAllowed: true,
+    autoReplay: true
+  }));
+
+  assert.strictEqual(classified.replayAllowed, false);
+  assert.strictEqual(classified.canReplaySideEffects, false);
+  assert.ok(classified.record.blockedReasons.includes("side_effect_replay_blocked"));
+  assert.strictEqual(assertToolExecutionAuditRecordNotReplayable(classified.record), true);
+}
+
+function testToolExecutionAuditRequiresGateSpine() {
+  const missingGate = validateToolExecutionAuditRecord(makeToolExecutionAuditRecord({
+    requiredGates: TOOL_EXECUTION_AUDIT_REQUIRED_GATES_TEST.filter(gate => gate !== "SideEffectSandbox")
+  }));
+
+  assert.strictEqual(missingGate.valid, false);
+  assert.ok(missingGate.errors.some(error => error.includes("missing required gate: SideEffectSandbox")));
+
+  const created = createToolExecutionAuditRecord(makeToolExecutionAuditRecord());
+  assert.strictEqual(created.requiredGates.length, TOOL_EXECUTION_AUDIT_REQUIRED_GATES_TEST.length);
+}
+
+function testToolExecutionAuditNoRuntimeExports() {
+  const moduleExports = require("../core/toolExecutionAuditLog");
+
+  for (const forbidden of [
+    "executeTool",
+    "runTool",
+    "writeFile",
+    "runGit",
+    "gitCommit",
+    "commit",
+    "grantPermission",
+    "executeCommand",
+    "autoFix",
+    "replay",
+    "autoReplay",
+    "replaySideEffects"
+  ]) {
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(moduleExports, forbidden), false);
+  }
+
+  const classified = classifyToolExecutionAuditRecord(makeToolExecutionAuditRecord());
+  const summary = summarizeToolExecutionAuditRecord(classified.record);
+
+  assert.strictEqual(summary.isProof, false);
+  assert.strictEqual(summary.replayAllowed, false);
+  assert.strictEqual(summary.permissionGrant, false);
+  assert.strictEqual(summary.runtimeExecutionAuthority, false);
+  assert.strictEqual(summary.canExecuteTools, false);
+  assert.strictEqual(summary.canWriteFiles, false);
+  assert.strictEqual(summary.canRunGit, false);
+  assert.strictEqual(summary.canCommit, false);
+  assert.strictEqual(summary.canGrantPermissions, false);
+  assert.strictEqual(summary.canReplaySideEffects, false);
 }

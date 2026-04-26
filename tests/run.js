@@ -1,5 +1,16 @@
 const assert = require("assert");
 const {
+  INPUT_RISK_FLAGS,
+  ALLOWED_NEXT_ACTIONS,
+  BLOCKED_ACTIONS,
+  createInputPatternResult,
+  validateInputPatternResult,
+  weighInputPattern,
+  createInputPatternWeigher,
+  classifyInputPatternResult,
+  assertInputPatternResultNotProof
+} = require("../core/inputPatternWeigher");
+const {
   PATTERN_TYPES,
   createPatternObservation,
   validatePatternObservation,
@@ -3552,6 +3563,11 @@ async function run() {
   testContextPatternGraphPatternTypes();
   testContextPatternGraphNoUserPatternImplementation();
   testContextPatternGraphContextUseDependency();
+  testInputPatternWeigherResultValidation();
+  testInputPatternWeigherCurrentInputOnly();
+  testInputPatternWeigherScopeExpansion();
+  testInputPatternWeigherWeakContextSource();
+  testInputPatternWeigherNoUserPatternTracking();
   testContextExporterAuthorityRuntime();
   testFallbackRouting();
   testPythonSandboxSafeExecution();
@@ -3733,4 +3749,138 @@ function testContextPatternGraphContextUseDependency() {
   const agents = getContextSurface(graph.contextUseGraph, "AGENTS.md");
   assert.strictEqual(canUseContextFor(agents, "routing_constraint"), true);
   assert.strictEqual(canUseContextFor(agents, "proof"), false);
+}
+function makeInputPatternResult(overrides = {}) {
+  return {
+    inputId: "input_test_001",
+    activeSeam: "InputPatternWeigher v1",
+    matchedPatterns: [
+      {
+        patternType: "scope_expansion_during_active_seam",
+        confidence: 0.8,
+        effect: "route_to_current_boundary_closure",
+        requiredValidation: "ContextUseGraph"
+      }
+    ],
+    riskFlags: ["scope_expansion_during_active_seam", "live_repo_evidence_required"],
+    allowedNextActions: ["inspect", "validate", "commit_gate"],
+    blockedActions: ["patch_without_evidence", "delete", "broad_refactor", "trust_memory_as_proof"],
+    blockedUses: ["proof", "autonomous_authority", "semantic_truth", "user_profile_inference"],
+    status: "hypothesis",
+    ...overrides
+  };
+}
+
+function testInputPatternWeigherResultValidation() {
+  assert.ok(INPUT_RISK_FLAGS.includes("scope_expansion_during_active_seam"));
+  assert.ok(ALLOWED_NEXT_ACTIONS.includes("commit_gate"));
+  assert.ok(BLOCKED_ACTIONS.includes("patch_without_evidence"));
+
+  const missing = validateInputPatternResult({});
+  assert.strictEqual(missing.valid, false);
+  assert.ok(missing.errors.some(error => error.includes("missing required field")));
+
+  const invalidPattern = validateInputPatternResult(makeInputPatternResult({
+    matchedPatterns: [
+      {
+        patternType: "not_real",
+        confidence: 2,
+        effect: "route_to_current_boundary_closure",
+        requiredValidation: "ContextUseGraph"
+      }
+    ]
+  }));
+
+  assert.strictEqual(invalidPattern.valid, false);
+  assert.ok(invalidPattern.errors.some(error => error.includes("unknown matched pattern type")));
+  assert.ok(invalidPattern.errors.some(error => error.includes("between 0 and 1")));
+
+  const missingBlocked = validateInputPatternResult(makeInputPatternResult({
+    blockedUses: ["proof"]
+  }));
+
+  assert.strictEqual(missingBlocked.valid, false);
+  assert.ok(missingBlocked.errors.some(error => error.includes("user_profile_inference")));
+
+  const truthField = validateInputPatternResult(makeInputPatternResult({ semanticTruth: true }));
+  assert.strictEqual(truthField.valid, false);
+  assert.ok(truthField.errors.some(error => error.includes("semantic truth")));
+}
+
+function testInputPatternWeigherCurrentInputOnly() {
+  const result = weighInputPattern({
+    inputId: "input_current_001",
+    inputText: "inspect classify plan apply commit gate",
+    activeSeam: "Current seam",
+    repoState: { workingTreeClean: true }
+  });
+
+  assert.strictEqual(result.inputId, "input_current_001");
+  assert.strictEqual(result.status, "hypothesis");
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(result, "inputText"), false);
+  assert.strictEqual(result.contextSurfaceCount, 25);
+
+  const classification = classifyInputPatternResult(result);
+  assert.strictEqual(classification.canAffectRouting, true);
+  assert.strictEqual(classification.canServeAsProof, false);
+  assert.strictEqual(classification.canTrackUserPatterns, false);
+  assert.strictEqual(assertInputPatternResultNotProof(result), true);
+}
+
+function testInputPatternWeigherScopeExpansion() {
+  const result = weighInputPattern({
+    inputId: "input_scope_001",
+    inputText: "implement the next graph while pending commit gate",
+    activeSeam: "ContextPatternGraph v1 CommitGate",
+    repoState: { dirty: true }
+  });
+
+  assert.ok(result.riskFlags.includes("scope_expansion_during_active_seam"));
+  assert.ok(result.riskFlags.includes("live_repo_evidence_required"));
+  assert.ok(result.allowedNextActions.includes("commit_gate"));
+  assert.ok(result.blockedActions.includes("broad_refactor"));
+  assert.ok(result.matchedPatterns.some(pattern => pattern.patternType === "scope_expansion_during_active_seam"));
+}
+
+function testInputPatternWeigherWeakContextSource() {
+  const result = weighInputPattern({
+    inputId: "input_context_001",
+    inputText: "use the memory summary from chat history",
+    activeSeam: "Planning"
+  });
+
+  assert.ok(result.riskFlags.includes("weak_context_source_dependency"));
+  assert.ok(result.riskFlags.includes("live_repo_evidence_required"));
+  assert.ok(result.matchedPatterns.some(pattern => pattern.patternType === "weak_context_source_dependency"));
+}
+
+function testInputPatternWeigherNoUserPatternTracking() {
+  assert.throws(
+    () => weighInputPattern({
+      inputText: "test",
+      activeSeam: "test",
+      emotionalState: "frustrated"
+    }),
+    /rejects truth, user-pattern, emotion, profile, and human-state fields/
+  );
+
+  const userPattern = validateInputPatternResult(makeInputPatternResult({
+    userPattern: true
+  }));
+
+  assert.strictEqual(userPattern.valid, false);
+  assert.ok(userPattern.errors.some(error => error.includes("user-pattern")));
+
+  const weigher = createInputPatternWeigher();
+  const result = weigher.weigh({
+    inputId: "input_weigher_001",
+    inputText: "formatting drift in generated artifact",
+    activeSeam: "SystemDriftAudit"
+  });
+
+  assert.ok(result.riskFlags.includes("formatting_drift_risk"));
+
+  const moduleExports = require("../core/inputPatternWeigher");
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(moduleExports, "UserPatternGraph"), false);
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(moduleExports, "HumanContextState"), false);
 }

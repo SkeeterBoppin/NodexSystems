@@ -6406,3 +6406,129 @@ function testRuntimeDryRunExecutionPathNoRuntimeExports() {
 
   console.log("ValidityGraphDependencyImplementation v1 tests passed");
 })();
+
+/* ControlCoverageMatrixImplementation v1 tests */
+(function runControlCoverageMatrixImplementationV1Tests() {
+  const assert = require("node:assert/strict");
+  const {
+    CONTROL_COVERAGE_MATRIX_STATUSES,
+    CONTROL_COVERAGE_MATRIX_COVERAGE_DIMENSIONS,
+    createControlCoverageMatrixManifest,
+    validateControlCoverageMatrixManifest,
+    classifyControlCoverageMatrixManifest,
+    assertControlCoverageMatrixManifestNotAuthority,
+    summarizeControlCoverageMatrixManifest,
+  } = require("../core/controlCoverageMatrixManifest.js");
+
+  function numbered(prefix, count) {
+    return Array.from({ length: count }, (_, index) => `${prefix}-${index + 1}`);
+  }
+
+  function makeValidManifest(overrides = {}) {
+    return {
+      manifestId: "ccmm-test-001",
+      sourceGap: "LGG-12",
+      sourceGateName: "ControlCoverageBeyondSpineHarness",
+      coverageDimensions: numbered("dimension", 10),
+      controlRows: numbered("control", 12),
+      faultInjectionCases: numbered("fault", 10),
+      requiredOutputs: numbered("output", 5),
+      boundaryCoverage: numbered("boundary", 6),
+      coverageAssertions: numbered("assertion", 8),
+      sourceCommit: "test-source-commit",
+      schemaVersion: "control-coverage-matrix-manifest-v1",
+      producer: "local-producer",
+      verifier: "local-verifier",
+      rejectionRules: ["reject coverage-to-authority wiring", "reject runtime authority"],
+      ...overrides,
+    };
+  }
+
+  function testControlCoverageMatrixManifestValidation() {
+    const manifest = createControlCoverageMatrixManifest(makeValidManifest());
+    const validation = validateControlCoverageMatrixManifest(manifest);
+    assert.equal(validation.valid, true);
+    assert.equal(validation.status, CONTROL_COVERAGE_MATRIX_STATUSES.VALID);
+
+    const classification = classifyControlCoverageMatrixManifest(manifest);
+    assert.equal(classification.valid, true);
+    assert.equal(classification.errorCount, 0);
+    assert.equal(CONTROL_COVERAGE_MATRIX_COVERAGE_DIMENSIONS.FAULT_INJECTION, "fault_injection");
+  }
+
+  function testControlCoverageMatrixRequiresCoverageRowsAndFaults() {
+    const insufficientDimensions = createControlCoverageMatrixManifest(makeValidManifest({
+      coverageDimensions: numbered("dimension", 9),
+    }));
+    assert.equal(validateControlCoverageMatrixManifest(insufficientDimensions).valid, false);
+
+    const insufficientRows = createControlCoverageMatrixManifest(makeValidManifest({
+      controlRows: numbered("control", 11),
+    }));
+    assert.equal(validateControlCoverageMatrixManifest(insufficientRows).valid, false);
+
+    const insufficientFaults = createControlCoverageMatrixManifest(makeValidManifest({
+      faultInjectionCases: numbered("fault", 9),
+    }));
+    assert.equal(validateControlCoverageMatrixManifest(insufficientFaults).valid, false);
+
+    const sameProducerVerifier = createControlCoverageMatrixManifest(makeValidManifest({
+      verifier: "local-producer",
+    }));
+    assert.equal(validateControlCoverageMatrixManifest(sameProducerVerifier).valid, false);
+  }
+
+  function testControlCoverageMatrixRejectsAuthorityFields() {
+    const runtimeAuthority = createControlCoverageMatrixManifest(makeValidManifest({
+      runtimeExecutionAllowed: true,
+    }));
+    const validation = validateControlCoverageMatrixManifest(runtimeAuthority);
+    assert.equal(validation.valid, false);
+    assert.equal(validation.authorityFields.includes("runtimeExecutionAllowed"), true);
+
+    const nestedGitAuthority = createControlCoverageMatrixManifest(makeValidManifest({
+      nested: { gitExecutionAllowedByNodex: true },
+    }));
+    assert.throws(() => assertControlCoverageMatrixManifestNotAuthority(nestedGitAuthority), /authority fields/);
+
+    const allowedNow = createControlCoverageMatrixManifest(makeValidManifest({
+      allowed_now: "toolExecutionAllowed",
+    }));
+    assert.equal(validateControlCoverageMatrixManifest(allowedNow).valid, false);
+  }
+
+  function testControlCoverageMatrixPreservesBoundaryFalse() {
+    const manifest = createControlCoverageMatrixManifest(makeValidManifest());
+    const summary = summarizeControlCoverageMatrixManifest(manifest);
+    assert.equal(summary.activationAllowed, false);
+    assert.equal(summary.runtimeIntegrationAllowed, false);
+    assert.equal(summary.actualDryRunExecutionAllowed, false);
+    assert.equal(summary.runtimeExecutionAllowed, false);
+    assert.equal(summary.toolExecutionAllowed, false);
+    assert.equal(summary.runtimeFileWritesAllowed, false);
+    assert.equal(summary.processExecutionAllowed, false);
+    assert.equal(summary.gitExecutionAllowedByNodex, false);
+    assert.equal(summary.permissionGrantsAllowed, false);
+    assert.equal(summary.agentHandoffRuntimeWiringAllowed, false);
+    assert.equal(summary.modelOutputAuthorityAllowed, false);
+    assert.equal(summary.replayAuthorityAllowed, false);
+  }
+
+  function testControlCoverageMatrixNoRuntimeExports() {
+    const manifestModule = require("../core/controlCoverageMatrixManifest.js");
+    const exportedKeys = Object.keys(manifestModule);
+    assert.equal(exportedKeys.includes("execute"), false);
+    assert.equal(exportedKeys.includes("run"), false);
+    assert.equal(exportedKeys.includes("grantAuthority"), false);
+    assert.equal(exportedKeys.includes("approveActivation"), false);
+    assert.equal(exportedKeys.includes("allowRuntimeExecution"), false);
+  }
+
+  testControlCoverageMatrixManifestValidation();
+  testControlCoverageMatrixRequiresCoverageRowsAndFaults();
+  testControlCoverageMatrixRejectsAuthorityFields();
+  testControlCoverageMatrixPreservesBoundaryFalse();
+  testControlCoverageMatrixNoRuntimeExports();
+
+  console.log("ControlCoverageMatrixImplementation v1 tests passed");
+})();

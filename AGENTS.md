@@ -25,7 +25,7 @@ Confidence is not evidence.
 Plausibility is not evidence.
 Fluent output is not evidence.
 
-Source of truth, in order:
+Source of truth (validated live evidence only), in order:
 1. live repo state
 2. exact file contents
 3. exact diff

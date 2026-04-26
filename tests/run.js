@@ -1,5 +1,16 @@
 const assert = require("assert");
 const {
+  PERMISSION_GATE_SCOPES,
+  PERMISSION_GATE_STATUSES,
+  PERMISSION_GATE_DECISIONS,
+  PERMISSION_GATE_BLOCKED_REASONS,
+  createPermissionRequest,
+  validatePermissionRequest,
+  classifyPermissionRequest,
+  assertPermissionNotGranted,
+  summarizePermissionRequest
+} = require("../core/permissionGate");
+const {
   RUNTIME_BOUNDARY_ACTIONS,
   RUNTIME_BOUNDARY_STATUSES,
   RUNTIME_BOUNDARY_SIDE_EFFECT_LEVELS,
@@ -3651,6 +3662,11 @@ async function run() {
   testRuntimeBoundaryDefersRuntimeIntegration();
   testRuntimeBoundaryRequiresGateSpine();
   testRuntimeBoundaryNoRuntimeExports();
+  testPermissionGateRequestValidation();
+  testPermissionGateDoesNotGrantPermissions();
+  testPermissionGateBlocksRuntimeSensitiveScopes();
+  testPermissionGateRequiresEvidenceAndHumanState();
+  testPermissionGateNoRuntimeExports();
   testContextExporterAuthorityRuntime();
   testFallbackRouting();
   testPythonSandboxSafeExecution();
@@ -4623,4 +4639,139 @@ function testRuntimeBoundaryNoRuntimeExports() {
   assert.strictEqual(classified.canCommit, false);
   assert.strictEqual(classified.canGrantPermissions, false);
   assert.strictEqual(classified.canUseModelOutputAsProof, false);
+}
+function makePermissionGateRequest(overrides = {}) {
+  return {
+    permissionId: "permission_gate_request_test",
+    source: "test_harness",
+    requestedScope: "classification",
+    targetCapability: "metadata",
+    evidenceState: "present",
+    humanApprovalState: "not_required_for_metadata",
+    decision: "metadata_only",
+    status: "metadata_only",
+    permissionGranted: false,
+    blockedReasons: [],
+    ...overrides
+  };
+}
+
+function testPermissionGateRequestValidation() {
+  assert.ok(PERMISSION_GATE_SCOPES.includes("tool_execution"));
+  assert.ok(PERMISSION_GATE_STATUSES.includes("blocked"));
+  assert.ok(PERMISSION_GATE_DECISIONS.includes("deny"));
+  assert.ok(PERMISSION_GATE_BLOCKED_REASONS.includes("model_output_approval_blocked"));
+
+  const missing = validatePermissionRequest({});
+  assert.strictEqual(missing.valid, false);
+  assert.ok(missing.errors.some(error => error.includes("missing required field")));
+
+  const invalid = validatePermissionRequest(makePermissionGateRequest({
+    requestedScope: "not_real",
+    status: "not_real",
+    decision: "not_real",
+    blockedReasons: ["not_real"]
+  }));
+
+  assert.strictEqual(invalid.valid, false);
+  assert.ok(invalid.errors.some(error => error.includes("unknown requestedScope")));
+  assert.ok(invalid.errors.some(error => error.includes("unknown status")));
+  assert.ok(invalid.errors.some(error => error.includes("unknown decision")));
+  assert.ok(invalid.errors.some(error => error.includes("unknown blockedReason")));
+}
+
+function testPermissionGateDoesNotGrantPermissions() {
+  const grant = validatePermissionRequest(makePermissionGateRequest({
+    permissionGranted: true
+  }));
+
+  assert.strictEqual(grant.valid, false);
+  assert.ok(grant.errors.some(error => error.includes("permissionGranted must be false")));
+
+  const classified = classifyPermissionRequest(makePermissionGateRequest({
+    requestedScope: "permission_grant",
+    permissionGranted: true,
+    grantPermission: true
+  }));
+
+  assert.strictEqual(classified.permissionGranted, false);
+  assert.strictEqual(classified.canGrantPermissions, false);
+  assert.strictEqual(classified.status, "blocked");
+  assert.ok(classified.request.blockedReasons.includes("permission_grant_blocked"));
+  assert.strictEqual(assertPermissionNotGranted(classified.request), true);
+}
+
+function testPermissionGateBlocksRuntimeSensitiveScopes() {
+  for (const [requestedScope, expectedReason] of [
+    ["tool_execution", "tool_execution_permission_blocked"],
+    ["file_write", "file_write_permission_blocked"],
+    ["git_execution", "git_execution_permission_blocked"],
+    ["commit", "commit_permission_blocked"],
+    ["runtime_integration", "runtime_integration_permission_blocked"]
+  ]) {
+    const classified = classifyPermissionRequest(makePermissionGateRequest({
+      requestedScope,
+      targetCapability: requestedScope
+    }));
+
+    assert.strictEqual(classified.status, "blocked");
+    assert.strictEqual(classified.permissionGranted, false);
+    assert.ok(classified.request.blockedReasons.includes(expectedReason));
+    assert.strictEqual(assertPermissionNotGranted(classified.request), true);
+  }
+}
+
+function testPermissionGateRequiresEvidenceAndHumanState() {
+  const missingEvidence = classifyPermissionRequest(makePermissionGateRequest({
+    evidenceState: "missing"
+  }));
+
+  assert.strictEqual(missingEvidence.status, "blocked");
+  assert.ok(missingEvidence.request.blockedReasons.includes("evidence_missing"));
+
+  const missingHumanApproval = classifyPermissionRequest(makePermissionGateRequest({
+    humanApprovalState: "missing"
+  }));
+
+  assert.strictEqual(missingHumanApproval.status, "blocked");
+  assert.ok(missingHumanApproval.request.blockedReasons.includes("human_approval_missing"));
+
+  const modelApproval = validatePermissionRequest(makePermissionGateRequest({
+    modelOutputUsedAsApproval: true
+  }));
+
+  assert.strictEqual(modelApproval.valid, false);
+  assert.ok(modelApproval.errors.some(error => error.includes("model output")));
+}
+
+function testPermissionGateNoRuntimeExports() {
+  const moduleExports = require("../core/permissionGate");
+
+  for (const forbidden of [
+    "executeTool",
+    "runTool",
+    "writeFile",
+    "runGit",
+    "gitCommit",
+    "commit",
+    "grantPermission",
+    "executeCommand",
+    "autoFix"
+  ]) {
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(moduleExports, forbidden), false);
+  }
+
+  const classified = classifyPermissionRequest(makePermissionGateRequest());
+  const summary = summarizePermissionRequest(classified.request);
+
+  assert.strictEqual(summary.permissionGranted, false);
+  assert.strictEqual(summary.canExecuteTools, false);
+  assert.strictEqual(summary.canWriteFiles, false);
+  assert.strictEqual(summary.canRunGit, false);
+  assert.strictEqual(summary.canCommit, false);
+  assert.strictEqual(summary.canGrantPermissions, false);
+  assert.strictEqual(summary.canUseModelOutputAsApproval, false);
+
+  const created = createPermissionRequest(makePermissionGateRequest());
+  assert.strictEqual(created.permissionGranted, false);
 }

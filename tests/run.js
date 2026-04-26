@@ -43,6 +43,12 @@ const {
   validateMemoryCapsule
 } = require("../core/memoryCapsule");
 const {
+  createContextLedgerRecord,
+  validateContextLedgerRecord,
+  appendContextLedgerRecord,
+  validateContextLedger
+} = require("../core/contextLedger");
+const {
   createAgentHandoffPacket,
   validateAgentHandoffPacket
 } = require("../core/agentHandoffPacket");
@@ -1971,6 +1977,281 @@ function testMemoryCapsuleRuntime() {
   }
 }
 
+function buildContextLedgerMemoryCapsuleInput(mutate) {
+  const input = {
+    version: 1,
+    capsuleId: "agent_handoff_bridge_v1",
+    phase: "stabilization",
+    seam: {
+      id: "agent_handoff_bridge_v1",
+      title: "Agent Handoff Bridge v1",
+      status: "validated"
+    },
+    commit: {
+      head: "562bfce",
+      message: "Add deterministic agent handoff bridge"
+    },
+    files: [" ./core\\agentHandoffBridge.js ", " tests\\run.js "],
+    evidence: [
+      {
+        kind: "test",
+        subject: " .\\tests\\run.js ",
+        result: "pass",
+        summary: "All Nodex tests passed"
+      }
+    ],
+    summary: {
+      problem: "Need deterministic TaskGraph to AgentHandoffPacket bridge",
+      change: "Added pure bridge adapter",
+      outcome: "Validated and committed",
+      limits: [
+        "no execution",
+        "no persistence"
+      ]
+    }
+  };
+
+  if (typeof mutate === "function") {
+    mutate(input);
+  }
+
+  return input;
+}
+
+function buildContextLedgerRecordInput(sequence = 1, recordId = "agent_handoff_bridge_v1", mutate) {
+  const input = {
+    version: 1,
+    ledgerId: " nodex_context ",
+    sequence,
+    recordId,
+    timestamp: "2026-04-25T10:20:36-07:00",
+    memoryCapsule: buildContextLedgerMemoryCapsuleInput()
+  };
+
+  if (typeof mutate === "function") {
+    mutate(input);
+  }
+
+  return input;
+}
+
+function testContextLedgerRuntime() {
+  {
+    const input = buildContextLedgerRecordInput();
+    const record = createContextLedgerRecord(input);
+
+    assert.strictEqual(record.version, 1);
+    assert.strictEqual(record.ledgerId, "nodex_context");
+    assert.strictEqual(record.sequence, 1);
+    assert.strictEqual(record.recordId, "agent_handoff_bridge_v1");
+    assert.strictEqual(record.timestamp, "2026-04-25T17:20:36.000Z");
+    assert.deepStrictEqual(record.files, ["core/agentHandoffBridge.js", "tests/run.js"]);
+    assert.strictEqual(record.memoryCapsule.capsuleId, "agent_handoff_bridge_v1");
+    assert.strictEqual(input.ledgerId, " nodex_context ");
+    assert.deepStrictEqual(input.memoryCapsule.files, [" ./core\\agentHandoffBridge.js ", " tests\\run.js "]);
+  }
+
+  {
+    const input = buildContextLedgerRecordInput();
+    assert.strictEqual(validateContextLedgerRecord(input), true);
+  }
+
+  {
+    const input = buildContextLedgerRecordInput();
+    const record = createContextLedgerRecord(input);
+
+    assert.deepStrictEqual(record.seam, record.memoryCapsule.seam);
+    assert.strictEqual(record.phase, record.memoryCapsule.phase);
+    assert.deepStrictEqual(record.commit, record.memoryCapsule.commit);
+    assert.deepStrictEqual(record.files, record.memoryCapsule.files);
+    assert.deepStrictEqual(record.evidence, record.memoryCapsule.evidence);
+    assert.deepStrictEqual(record.summary, record.memoryCapsule.summary);
+  }
+
+  {
+    const input = buildContextLedgerRecordInput();
+    const snapshot = JSON.parse(JSON.stringify(input));
+    const record = createContextLedgerRecord(input);
+
+    assert.deepStrictEqual(input, snapshot);
+    assert.notStrictEqual(record, input);
+    assert.notStrictEqual(record.seam, input.memoryCapsule.seam);
+    assert.notStrictEqual(record.commit, input.memoryCapsule.commit);
+    assert.notStrictEqual(record.files, input.memoryCapsule.files);
+    assert.notStrictEqual(record.evidence, input.memoryCapsule.evidence);
+    assert.notStrictEqual(record.summary, input.memoryCapsule.summary);
+    assert.notStrictEqual(record.memoryCapsule, input.memoryCapsule);
+
+    record.files[0] = "tests/run.js";
+    record.memoryCapsule.summary.limits[0] = "changed";
+
+    assert.strictEqual(input.memoryCapsule.files[0], " ./core\\agentHandoffBridge.js ");
+    assert.strictEqual(input.memoryCapsule.summary.limits[0], "no execution");
+  }
+
+  {
+    const input = buildContextLedgerRecordInput();
+    input.extra = true;
+    assert.throws(() => createContextLedgerRecord(input), /unknown/i);
+  }
+
+  {
+    const input = buildContextLedgerRecordInput();
+    input.ledgerId = "nodex-context";
+    assert.throws(() => createContextLedgerRecord(input), /ledgerId/i);
+  }
+
+  {
+    const zeroInput = buildContextLedgerRecordInput();
+    zeroInput.sequence = 0;
+    assert.throws(() => createContextLedgerRecord(zeroInput), /sequence/i);
+
+    const fractionalInput = buildContextLedgerRecordInput();
+    fractionalInput.sequence = 1.5;
+    assert.throws(() => createContextLedgerRecord(fractionalInput), /sequence/i);
+  }
+
+  {
+    const input = buildContextLedgerRecordInput();
+    input.recordId = "agent-handoff-bridge-v1";
+    assert.throws(() => createContextLedgerRecord(input), /recordId/i);
+  }
+
+  {
+    const input = buildContextLedgerRecordInput();
+    input.timestamp = "not a date";
+    assert.throws(() => createContextLedgerRecord(input), /timestamp/i);
+  }
+
+  {
+    const input = buildContextLedgerRecordInput();
+    input.memoryCapsule.capsuleId = "agent-handoff-bridge-v1";
+    assert.throws(() => createContextLedgerRecord(input), /capsuleId|memoryCapsule/i);
+  }
+
+  {
+    assert.strictEqual(validateContextLedger({
+      version: 1,
+      ledgerId: "nodex_context",
+      records: []
+    }), true);
+  }
+
+  {
+    const first = createContextLedgerRecord(buildContextLedgerRecordInput());
+    const second = createContextLedgerRecord(buildContextLedgerRecordInput(2, "memory_capsule_v1", input => {
+      input.memoryCapsule.capsuleId = "memory_capsule_v1";
+      input.memoryCapsule.seam.id = "memory_capsule_v1";
+      input.memoryCapsule.seam.title = "Memory Capsule v1";
+      input.memoryCapsule.commit.head = "c360a2d";
+      input.memoryCapsule.commit.message = "Add deterministic memory capsule";
+    }));
+
+    assert.strictEqual(validateContextLedger({
+      version: 1,
+      ledgerId: "nodex_context",
+      records: [first, second]
+    }), true);
+  }
+
+  {
+    const record = createContextLedgerRecord(buildContextLedgerRecordInput(1, "other_record", input => {
+      input.ledgerId = "other_context";
+    }));
+
+    assert.throws(() => validateContextLedger({
+      version: 1,
+      ledgerId: "nodex_context",
+      records: [record]
+    }), /ledgerId/i);
+  }
+
+  {
+    const first = createContextLedgerRecord(buildContextLedgerRecordInput());
+    const duplicate = createContextLedgerRecord(buildContextLedgerRecordInput(2, "agent_handoff_bridge_v1"));
+
+    assert.throws(() => validateContextLedger({
+      version: 1,
+      ledgerId: "nodex_context",
+      records: [first, duplicate]
+    }), /recordId|unique/i);
+  }
+
+  {
+    const first = createContextLedgerRecord(buildContextLedgerRecordInput());
+    const gap = createContextLedgerRecord(buildContextLedgerRecordInput(3, "memory_capsule_v1", input => {
+      input.memoryCapsule.capsuleId = "memory_capsule_v1";
+      input.memoryCapsule.seam.id = "memory_capsule_v1";
+      input.memoryCapsule.seam.title = "Memory Capsule v1";
+    }));
+
+    assert.throws(() => validateContextLedger({
+      version: 1,
+      ledgerId: "nodex_context",
+      records: [first, gap]
+    }), /sequence/i);
+  }
+
+  {
+    const ledger = appendContextLedgerRecord({
+      version: 1,
+      ledgerId: "nodex_context",
+      records: []
+    }, buildContextLedgerRecordInput());
+
+    assert.strictEqual(ledger.version, 1);
+    assert.strictEqual(ledger.ledgerId, "nodex_context");
+    assert.strictEqual(ledger.records.length, 1);
+    assert.strictEqual(ledger.records[0].recordId, "agent_handoff_bridge_v1");
+  }
+
+  {
+    assert.throws(() => appendContextLedgerRecord({
+      version: 1,
+      ledgerId: "nodex_context",
+      records: []
+    }, buildContextLedgerRecordInput(2, "agent_handoff_bridge_v1")), /sequence/i);
+  }
+
+  {
+    const first = createContextLedgerRecord(buildContextLedgerRecordInput());
+
+    assert.throws(() => appendContextLedgerRecord({
+      version: 1,
+      ledgerId: "nodex_context",
+      records: [first]
+    }, buildContextLedgerRecordInput(2, "agent_handoff_bridge_v1")), /recordId|unique/i);
+  }
+
+  {
+    const originalLedger = {
+      version: 1,
+      ledgerId: "nodex_context",
+      records: []
+    };
+    const snapshot = JSON.parse(JSON.stringify(originalLedger));
+    const ledger = appendContextLedgerRecord(originalLedger, buildContextLedgerRecordInput());
+
+    assert.deepStrictEqual(originalLedger, snapshot);
+    assert.notStrictEqual(ledger, originalLedger);
+    assert.notStrictEqual(ledger.records, originalLedger.records);
+    assert.strictEqual(originalLedger.records.length, 0);
+    assert.strictEqual(ledger.records.length, 1);
+  }
+
+  {
+    const recordInput = buildContextLedgerRecordInput();
+    const snapshot = JSON.parse(JSON.stringify(recordInput));
+
+    appendContextLedgerRecord({
+      version: 1,
+      ledgerId: "nodex_context",
+      records: []
+    }, recordInput);
+
+    assert.deepStrictEqual(recordInput, snapshot);
+  }
+}
 function buildEvidenceGateInput() {
   return {
     version: 1,
@@ -2759,7 +3040,8 @@ async function run() {
   testAgentHandoffPacketRuntime();
   testAgentHandoffBridgeRuntime();
   testMemoryCapsuleRuntime();
-  testEvidenceGateRuntime();
+    testContextLedgerRuntime();
+testEvidenceGateRuntime();
   testTranscriptParserRuntime();
   testTranscriptEvidenceAdapterRuntime();
   testFallbackRouting();

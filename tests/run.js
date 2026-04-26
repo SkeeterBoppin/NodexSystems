@@ -1,5 +1,16 @@
 const assert = require("assert");
 const {
+  RUNTIME_BOUNDARY_ACTIONS,
+  RUNTIME_BOUNDARY_STATUSES,
+  RUNTIME_BOUNDARY_SIDE_EFFECT_LEVELS,
+  RUNTIME_BOUNDARY_BLOCKED_REASONS,
+  createRuntimeRequest,
+  validateRuntimeRequest,
+  classifyRuntimeRequest,
+  assertRuntimeRequestBlocked,
+  summarizeRuntimeRequest
+} = require("../core/runtimeIntegrationBoundary");
+const {
   HANDOFF_RUNNER_ACTIONS,
   HANDOFF_RUNNER_STATUSES,
   HANDOFF_RUNNER_BLOCKED_REASONS,
@@ -3635,6 +3646,11 @@ async function run() {
   testAgentHandoffRunnerBlocksToolAndGitExecution();
   testAgentHandoffRunnerRequiresGateSpine();
   testAgentHandoffRunnerNoRuntimeExports();
+  testRuntimeBoundaryRequestValidation();
+  testRuntimeBoundaryBlocksExecutableIntent();
+  testRuntimeBoundaryDefersRuntimeIntegration();
+  testRuntimeBoundaryRequiresGateSpine();
+  testRuntimeBoundaryNoRuntimeExports();
   testContextExporterAuthorityRuntime();
   testFallbackRouting();
   testPythonSandboxSafeExecution();
@@ -4470,4 +4486,141 @@ function testAgentHandoffRunnerNoRuntimeExports() {
   assert.strictEqual(summary.canCommit, false);
   assert.strictEqual(summary.canGrantPermissions, false);
   assert.strictEqual(summary.canUseModelOutputAsProof, false);
+}
+const RUNTIME_BOUNDARY_REQUIRED_GATES_TEST = [
+  "AgentHandoffRunner",
+  "ToolCapabilityRegistry",
+  "PermissionGate",
+  "EvidenceGate",
+  "ReplayStore",
+  "CommitGate"
+];
+
+function makeRuntimeBoundaryRequest(overrides = {}) {
+  return {
+    requestId: "runtime_boundary_request_test",
+    source: "test_harness",
+    requestedAction: "plan",
+    targetCapability: "metadata",
+    sideEffectLevel: "metadata_only",
+    requiredGates: RUNTIME_BOUNDARY_REQUIRED_GATES_TEST,
+    permissionState: "not_requested",
+    evidenceState: "unverified",
+    runtimeAllowed: false,
+    blockedReasons: [],
+    ...overrides
+  };
+}
+
+function testRuntimeBoundaryRequestValidation() {
+  assert.ok(RUNTIME_BOUNDARY_ACTIONS.includes("execute_tool"));
+  assert.ok(RUNTIME_BOUNDARY_STATUSES.includes("blocked"));
+  assert.ok(RUNTIME_BOUNDARY_SIDE_EFFECT_LEVELS.includes("git_execution"));
+  assert.ok(RUNTIME_BOUNDARY_BLOCKED_REASONS.includes("runtime_not_approved"));
+
+  const missing = validateRuntimeRequest({});
+  assert.strictEqual(missing.valid, false);
+  assert.ok(missing.errors.some(error => error.includes("missing required field")));
+
+  const invalid = validateRuntimeRequest(makeRuntimeBoundaryRequest({
+    requestedAction: "not_real",
+    sideEffectLevel: "not_real",
+    status: "not_real",
+    blockedReasons: ["not_real"]
+  }));
+
+  assert.strictEqual(invalid.valid, false);
+  assert.ok(invalid.errors.some(error => error.includes("unknown requestedAction")));
+  assert.ok(invalid.errors.some(error => error.includes("unknown sideEffectLevel")));
+  assert.ok(invalid.errors.some(error => error.includes("unknown status")));
+  assert.ok(invalid.errors.some(error => error.includes("unknown blockedReason")));
+}
+
+function testRuntimeBoundaryBlocksExecutableIntent() {
+  for (const [requestedAction, expectedReason] of [
+    ["execute_tool", "tool_execution_blocked"],
+    ["write_file", "file_write_blocked"],
+    ["run_git", "git_execution_blocked"],
+    ["commit", "commit_blocked"],
+    ["grant_permission", "permission_grant_blocked"],
+    ["runtime_integration", "runtime_integration_blocked"]
+  ]) {
+    const classified = classifyRuntimeRequest(makeRuntimeBoundaryRequest({
+      requestedAction,
+      targetCapability: requestedAction,
+      sideEffectLevel: "unknown"
+    }));
+
+    assert.strictEqual(classified.status, "blocked");
+    assert.strictEqual(classified.runtimeAllowed, false);
+    assert.ok(classified.request.blockedReasons.includes(expectedReason));
+    assert.strictEqual(assertRuntimeRequestBlocked(classified.request), true);
+  }
+
+  const modelProof = validateRuntimeRequest(makeRuntimeBoundaryRequest({
+    modelOutputUsedAsProof: true
+  }));
+
+  assert.strictEqual(modelProof.valid, false);
+  assert.ok(modelProof.errors.some(error => error.includes("model output")));
+}
+
+function testRuntimeBoundaryDefersRuntimeIntegration() {
+  const classified = classifyRuntimeRequest(makeRuntimeBoundaryRequest({
+    requestedAction: "runtime_integration",
+    targetCapability: "agent_runtime",
+    sideEffectLevel: "process_execution",
+    runtimeIntegration: true
+  }));
+
+  const summary = summarizeRuntimeRequest(classified.request);
+
+  assert.strictEqual(classified.status, "blocked");
+  assert.strictEqual(classified.runtimeAllowed, false);
+  assert.strictEqual(classified.canExecuteTools, false);
+  assert.strictEqual(classified.canWriteFiles, false);
+  assert.strictEqual(classified.canRunGit, false);
+  assert.strictEqual(classified.canCommit, false);
+  assert.strictEqual(classified.canGrantPermissions, false);
+  assert.strictEqual(summary.runtimeAllowed, false);
+  assert.ok(classified.request.blockedReasons.includes("runtime_integration_blocked"));
+  assert.ok(classified.request.blockedReasons.includes("runtime_not_approved"));
+}
+
+function testRuntimeBoundaryRequiresGateSpine() {
+  const missingGate = validateRuntimeRequest(makeRuntimeBoundaryRequest({
+    requiredGates: RUNTIME_BOUNDARY_REQUIRED_GATES_TEST.filter(gate => gate !== "PermissionGate")
+  }));
+
+  assert.strictEqual(missingGate.valid, false);
+  assert.ok(missingGate.errors.some(error => error.includes("missing required gate: PermissionGate")));
+
+  const created = createRuntimeRequest(makeRuntimeBoundaryRequest());
+  assert.strictEqual(created.requiredGates.length, RUNTIME_BOUNDARY_REQUIRED_GATES_TEST.length);
+}
+
+function testRuntimeBoundaryNoRuntimeExports() {
+  const moduleExports = require("../core/runtimeIntegrationBoundary");
+
+  for (const forbidden of [
+    "executeTool",
+    "runTool",
+    "writeFile",
+    "runGit",
+    "gitCommit",
+    "commit",
+    "grantPermission",
+    "executeCommand",
+    "autoFix"
+  ]) {
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(moduleExports, forbidden), false);
+  }
+
+  const classified = classifyRuntimeRequest(makeRuntimeBoundaryRequest());
+  assert.strictEqual(classified.canExecuteTools, false);
+  assert.strictEqual(classified.canWriteFiles, false);
+  assert.strictEqual(classified.canRunGit, false);
+  assert.strictEqual(classified.canCommit, false);
+  assert.strictEqual(classified.canGrantPermissions, false);
+  assert.strictEqual(classified.canUseModelOutputAsProof, false);
 }

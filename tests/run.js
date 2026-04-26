@@ -1,5 +1,15 @@
 const assert = require("assert");
 const {
+  COMMIT_GATE_REQUIRED_STEPS,
+  COMMIT_GATE_STATUSES,
+  COMMIT_GATE_BLOCKING_REASONS,
+  createCommitGateRecord,
+  validateCommitGateRecord,
+  evaluateCommitGateRecord,
+  assertCommitGatePassed,
+  summarizeCommitGateRecord
+} = require("../core/commitGate");
+const {
   REPLAY_RECORD_TYPES,
   REPLAY_AUTHORITY_STATES,
   REPLAY_BLOCKED_AUTHORITY_STATES,
@@ -3604,6 +3614,11 @@ async function run() {
   testReplayStoreFreshnessGate();
   testReplayStoreSideEffectReplayBlocked();
   testReplayStorePersistenceSchema();
+  testCommitGateRecordValidation();
+  testCommitGateRequiredSteps();
+  testCommitGateBlocksOnFailedStep();
+  testCommitGatePassesOnlyWhenAllRequiredStepsPass();
+  testCommitGateNoRuntimeGitExecution();
   testContextExporterAuthorityRuntime();
   testFallbackRouting();
   testPythonSandboxSafeExecution();
@@ -4167,4 +4182,129 @@ function testReplayStorePersistenceSchema() {
 
   assert.strictEqual(invalid.valid, false);
   assert.ok(invalid.errors.some(error => error.includes("must not grant permissions")));
+}
+function makeCommitGateSteps(overrides = {}) {
+  return COMMIT_GATE_REQUIRED_STEPS.map(step => ({
+    step,
+    status: overrides[step] || "passed",
+    evidence: step + "_evidence"
+  }));
+}
+
+function makeCommitGateRecord(overrides = {}) {
+  return {
+    gateId: "commit_gate_test_001",
+    seam: "CommitGateAutomationImplementation v1",
+    expectedFiles: ["core/commitGate.js", "tests/run.js"],
+    actualFiles: ["core/commitGate.js", "tests/run.js"],
+    steps: makeCommitGateSteps(),
+    evidencePath: "C:\\Users\\Zak\\OneDrive\\Desktop\\Nodex Evidence\\commit_gate_test.txt",
+    status: "passed",
+    ...overrides
+  };
+}
+
+function testCommitGateRecordValidation() {
+  assert.ok(COMMIT_GATE_REQUIRED_STEPS.includes("unstaged_diff_check"));
+  assert.ok(COMMIT_GATE_STATUSES.includes("blocked"));
+  assert.ok(COMMIT_GATE_BLOCKING_REASONS.includes("model_output_used_as_proof"));
+
+  const missing = validateCommitGateRecord({});
+  assert.strictEqual(missing.valid, false);
+  assert.ok(missing.errors.some(error => error.includes("missing required field")));
+
+  const unknownStep = validateCommitGateRecord(makeCommitGateRecord({
+    steps: [
+      ...makeCommitGateSteps(),
+      { step: "not_real", status: "passed", evidence: "x" }
+    ]
+  }));
+
+  assert.strictEqual(unknownStep.valid, false);
+  assert.ok(unknownStep.errors.some(error => error.includes("unknown commit gate step")));
+
+  const runtimeMutation = validateCommitGateRecord(makeCommitGateRecord({
+    autoCommit: true
+  }));
+
+  assert.strictEqual(runtimeMutation.valid, false);
+  assert.ok(runtimeMutation.errors.some(error => error.includes("must not execute git")));
+}
+
+function testCommitGateRequiredSteps() {
+  const record = createCommitGateRecord(makeCommitGateRecord());
+
+  assert.strictEqual(record.steps.length, COMMIT_GATE_REQUIRED_STEPS.length);
+
+  for (const step of COMMIT_GATE_REQUIRED_STEPS) {
+    assert.ok(record.steps.some(item => item.step === step));
+  }
+
+  const missingStep = validateCommitGateRecord(makeCommitGateRecord({
+    steps: makeCommitGateSteps().filter(step => step.step !== "staged_diff_check")
+  }));
+
+  assert.strictEqual(missingStep.valid, false);
+  assert.ok(missingStep.errors.some(error => error.includes("missing required commit gate step")));
+}
+
+function testCommitGateBlocksOnFailedStep() {
+  const record = makeCommitGateRecord({
+    steps: makeCommitGateSteps({
+      full_test_harness: "failed"
+    })
+  });
+
+  const evaluation = evaluateCommitGateRecord(record);
+
+  assert.strictEqual(evaluation.eligible, false);
+  assert.strictEqual(evaluation.status, "blocked");
+  assert.ok(evaluation.failedSteps.includes("full_test_harness"));
+  assert.strictEqual(evaluation.canRunGit, false);
+  assert.strictEqual(evaluation.canCommit, false);
+  assert.throws(() => assertCommitGatePassed(record), /CommitGate blocked/);
+}
+
+function testCommitGatePassesOnlyWhenAllRequiredStepsPass() {
+  const record = makeCommitGateRecord();
+  const evaluation = evaluateCommitGateRecord(record);
+  const summary = summarizeCommitGateRecord(record);
+
+  assert.strictEqual(evaluation.eligible, true);
+  assert.strictEqual(assertCommitGatePassed(record), true);
+  assert.strictEqual(summary.eligible, true);
+  assert.strictEqual(summary.expectedFileCount, 2);
+  assert.strictEqual(summary.actualFileCount, 2);
+
+  const broadStaging = validateCommitGateRecord(makeCommitGateRecord({
+    actualFiles: ["core/commitGate.js", "tests/run.js", "extra.js"]
+  }));
+
+  assert.strictEqual(broadStaging.valid, false);
+  assert.ok(broadStaging.errors.some(error => error.includes("actualFiles must exactly match expectedFiles")));
+}
+
+function testCommitGateNoRuntimeGitExecution() {
+  const moduleExports = require("../core/commitGate");
+
+  for (const forbidden of [
+    "runGit",
+    "gitAdd",
+    "gitCommit",
+    "stageFiles",
+    "commit",
+    "autoFix",
+    "executeCommand"
+  ]) {
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(moduleExports, forbidden), false);
+  }
+
+  const record = makeCommitGateRecord();
+  const evaluation = evaluateCommitGateRecord(record);
+
+  assert.strictEqual(evaluation.canRunGit, false);
+  assert.strictEqual(evaluation.canStageFiles, false);
+  assert.strictEqual(evaluation.canCommit, false);
+  assert.strictEqual(evaluation.canAutoFix, false);
+  assert.strictEqual(evaluation.canUseModelOutputAsProof, false);
 }

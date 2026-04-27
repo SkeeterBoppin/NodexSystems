@@ -7445,3 +7445,214 @@ console.log("PacketSystemConsolidationImplementation v1 tests passed");
   testPacketHelperExecutionAuthorityBoundaryRequiresOperatorGate();
   testPacketHelperExecutionAuthorityBoundarySummarizesNoAuthorityReadiness();
 }
+/* NODEX_RUNTIME_ADAPTER_SIDE_EFFECT_CONTRACT_TESTS_V1 */
+{
+  const assert = require('assert');
+  const runtimeAdapterSideEffectContract = require('../core/runtimeAdapterSideEffectContractManifest');
+
+  function testRuntimeAdapterSideEffectContractCreatesMetadataOnlyManifest() {
+    const manifest = runtimeAdapterSideEffectContract.createRuntimeAdapterSideEffectContractManifest();
+    const validation = runtimeAdapterSideEffectContract.validateRuntimeAdapterSideEffectContractManifest(manifest);
+
+    assert.strictEqual(validation.valid, true);
+    assert.strictEqual(manifest.metadataOnly, true);
+    assert.strictEqual(manifest.authorityGranted, false);
+    assert.strictEqual(manifest.denyByDefaultRequired, true);
+    assert.strictEqual(manifest.runtimeAdapterInvocationAllowed, false);
+    assert.strictEqual(manifest.toolAdapterInvocationAllowed, false);
+    assert.strictEqual(manifest.runtimeIntegrationAllowed, false);
+    assert.strictEqual(manifest.runtimeExecutionAllowed, false);
+    assert.strictEqual(manifest.toolExecutionAllowed, false);
+    assert.strictEqual(manifest.runtimeFileWritesAllowed, false);
+    assert.strictEqual(manifest.processExecutionAllowed, false);
+    assert.strictEqual(manifest.gitExecutionAllowedByNodex, false);
+    assert.strictEqual(manifest.permissionGrantsAllowed, false);
+  }
+
+  function testRuntimeAdapterSideEffectContractRejectsRuntimeExecution() {
+    const manifest = runtimeAdapterSideEffectContract.createRuntimeAdapterSideEffectContractManifest({
+      runtimeAdapterInvocationAllowed: true,
+      runtimeIntegrationAllowed: true,
+      runtimeExecutionAllowed: true,
+      sideEffectRows: [
+        {
+          ...runtimeAdapterSideEffectContract.createRuntimeAdapterSideEffectContractManifest().sideEffectRows[0],
+          runtimeAdapterInvocationAllowed: true,
+          runtimeExecutionAllowed: true,
+        },
+      ],
+    });
+    const validation = runtimeAdapterSideEffectContract.validateRuntimeAdapterSideEffectContractManifest(manifest);
+
+    assert.strictEqual(validation.valid, false);
+    assert.ok(validation.errors.includes('runtimeAdapterInvocationAllowed must be false'));
+    assert.ok(validation.errors.includes('runtimeIntegrationAllowed must be false'));
+    assert.ok(validation.errors.includes('runtimeExecutionAllowed must be false'));
+    assert.ok(validation.errors.includes('sideEffectRows[0].runtimeAdapterInvocationAllowed must be false'));
+    assert.ok(validation.errors.includes('sideEffectRows[0].runtimeExecutionAllowed must be false'));
+  }
+
+  function testRuntimeAdapterSideEffectContractRejectsToolExecution() {
+    const manifest = runtimeAdapterSideEffectContract.createRuntimeAdapterSideEffectContractManifest({
+      toolAdapterInvocationAllowed: true,
+      toolExecutionAllowed: true,
+      sideEffectRows: [
+        {
+          ...runtimeAdapterSideEffectContract.createRuntimeAdapterSideEffectContractManifest().sideEffectRows[0],
+          toolAdapterInvocationAllowed: true,
+          toolExecutionAllowed: true,
+        },
+      ],
+    });
+    const validation = runtimeAdapterSideEffectContract.validateRuntimeAdapterSideEffectContractManifest(manifest);
+
+    assert.strictEqual(validation.valid, false);
+    assert.ok(validation.errors.includes('toolAdapterInvocationAllowed must be false'));
+    assert.ok(validation.errors.includes('toolExecutionAllowed must be false'));
+    assert.ok(validation.errors.includes('sideEffectRows[0].toolAdapterInvocationAllowed must be false'));
+    assert.ok(validation.errors.includes('sideEffectRows[0].toolExecutionAllowed must be false'));
+  }
+
+  function testRuntimeAdapterSideEffectContractRejectsFileWrites() {
+    const manifest = runtimeAdapterSideEffectContract.createRuntimeAdapterSideEffectContractManifest({
+      runtimeFileWritesAllowed: true,
+      filesystemWritesAllowed: true,
+      sideEffectRows: [
+        {
+          ...runtimeAdapterSideEffectContract.createRuntimeAdapterSideEffectContractManifest().sideEffectRows[0],
+          runtimeFileWritesAllowed: true,
+          filesystemWritesAllowed: true,
+        },
+      ],
+    });
+    const validation = runtimeAdapterSideEffectContract.validateRuntimeAdapterSideEffectContractManifest(manifest);
+
+    assert.strictEqual(validation.valid, false);
+    assert.ok(validation.errors.includes('runtimeFileWritesAllowed must be false'));
+    assert.ok(validation.errors.includes('filesystemWritesAllowed must be false'));
+    assert.ok(validation.errors.includes('sideEffectRows[0].runtimeFileWritesAllowed must be false'));
+    assert.ok(validation.errors.includes('sideEffectRows[0].filesystemWritesAllowed must be false'));
+  }
+
+  function testRuntimeAdapterSideEffectContractRejectsProcessExecution() {
+    const manifest = runtimeAdapterSideEffectContract.createRuntimeAdapterSideEffectContractManifest({
+      processExecutionAllowed: true,
+      processSpawnAllowed: true,
+      networkIOAllowed: true,
+      sideEffectRows: [
+        {
+          ...runtimeAdapterSideEffectContract.createRuntimeAdapterSideEffectContractManifest().sideEffectRows[0],
+          processExecutionAllowed: true,
+          processSpawnAllowed: true,
+          networkIOAllowed: true,
+        },
+      ],
+    });
+    const validation = runtimeAdapterSideEffectContract.validateRuntimeAdapterSideEffectContractManifest(manifest);
+
+    assert.strictEqual(validation.valid, false);
+    assert.ok(validation.errors.includes('processExecutionAllowed must be false'));
+    assert.ok(validation.errors.includes('processSpawnAllowed must be false'));
+    assert.ok(validation.errors.includes('networkIOAllowed must be false'));
+    assert.ok(validation.errors.includes('sideEffectRows[0].processExecutionAllowed must be false'));
+    assert.ok(validation.errors.includes('sideEffectRows[0].processSpawnAllowed must be false'));
+    assert.ok(validation.errors.includes('sideEffectRows[0].networkIOAllowed must be false'));
+  }
+
+  function testRuntimeAdapterSideEffectContractRejectsGitExecution() {
+    const manifest = runtimeAdapterSideEffectContract.createRuntimeAdapterSideEffectContractManifest({
+      gitExecutionAllowedByNodex: true,
+      gitMutationAllowed: true,
+      sideEffectRows: [
+        {
+          ...runtimeAdapterSideEffectContract.createRuntimeAdapterSideEffectContractManifest().sideEffectRows[0],
+          gitExecutionAllowedByNodex: true,
+          gitMutationAllowed: true,
+        },
+      ],
+    });
+    const validation = runtimeAdapterSideEffectContract.validateRuntimeAdapterSideEffectContractManifest(manifest);
+
+    assert.strictEqual(validation.valid, false);
+    assert.ok(validation.errors.includes('gitExecutionAllowedByNodex must be false'));
+    assert.ok(validation.errors.includes('gitMutationAllowed must be false'));
+    assert.ok(validation.errors.includes('sideEffectRows[0].gitExecutionAllowedByNodex must be false'));
+    assert.ok(validation.errors.includes('sideEffectRows[0].gitMutationAllowed must be false'));
+  }
+
+  function testRuntimeAdapterSideEffectContractRequiresDenyByDefault() {
+    const manifest = runtimeAdapterSideEffectContract.createRuntimeAdapterSideEffectContractManifest({
+      denyByDefaultRequired: false,
+      credentialAccessAllowed: true,
+      environmentMutationAllowed: true,
+      sideEffectRows: [
+        {
+          ...runtimeAdapterSideEffectContract.createRuntimeAdapterSideEffectContractManifest().sideEffectRows[0],
+          denyByDefaultRequired: false,
+          credentialAccessAllowed: true,
+          environmentMutationAllowed: true,
+        },
+      ],
+    });
+    const validation = runtimeAdapterSideEffectContract.validateRuntimeAdapterSideEffectContractManifest(manifest);
+
+    assert.strictEqual(validation.valid, false);
+    assert.ok(validation.errors.includes('denyByDefaultRequired must be true'));
+    assert.ok(validation.errors.includes('credentialAccessAllowed must be false'));
+    assert.ok(validation.errors.includes('environmentMutationAllowed must be false'));
+    assert.ok(validation.errors.includes('sideEffectRows[0].denyByDefaultRequired must be true'));
+    assert.ok(validation.errors.includes('sideEffectRows[0].credentialAccessAllowed must be false'));
+    assert.ok(validation.errors.includes('sideEffectRows[0].environmentMutationAllowed must be false'));
+  }
+
+  function testRuntimeAdapterSideEffectContractSummarizesNoAuthorityReadiness() {
+    const manifest = runtimeAdapterSideEffectContract.createRuntimeAdapterSideEffectContractManifest();
+    const summary = runtimeAdapterSideEffectContract.summarizeRuntimeAdapterSideEffectContractManifest(manifest);
+    const classification = runtimeAdapterSideEffectContract.classifyRuntimeAdapterSideEffectContractReadiness(manifest);
+    const exportNames = Object.keys(runtimeAdapterSideEffectContract).sort();
+
+    assert.strictEqual(summary.metadataOnly, true);
+    assert.strictEqual(summary.authorityGranted, false);
+    assert.strictEqual(summary.denyByDefaultRequired, true);
+    assert.strictEqual(summary.implementationAllowedNow, false);
+    assert.strictEqual(summary.sourceMutationAllowedNow, false);
+    assert.strictEqual(summary.runtimeAdapterInvocationAllowed, false);
+    assert.strictEqual(summary.toolAdapterInvocationAllowed, false);
+    assert.strictEqual(summary.runtimeIntegrationAllowed, false);
+    assert.strictEqual(summary.runtimeExecutionAllowed, false);
+    assert.strictEqual(summary.toolExecutionAllowed, false);
+    assert.strictEqual(summary.runtimeFileWritesAllowed, false);
+    assert.strictEqual(summary.filesystemWritesAllowed, false);
+    assert.strictEqual(summary.processExecutionAllowed, false);
+    assert.strictEqual(summary.processSpawnAllowed, false);
+    assert.strictEqual(summary.networkIOAllowed, false);
+    assert.strictEqual(summary.gitExecutionAllowedByNodex, false);
+    assert.strictEqual(summary.gitMutationAllowed, false);
+    assert.strictEqual(summary.permissionGrantsAllowed, false);
+    assert.strictEqual(summary.credentialAccessAllowed, false);
+    assert.strictEqual(summary.environmentMutationAllowed, false);
+    assert.strictEqual(summary.agentHandoffRuntimeWiringAllowed, false);
+    assert.strictEqual(summary.packetHelperExecutionAllowed, false);
+    assert.strictEqual(classification.ready, true);
+    assert.strictEqual(classification.authorityGranted, false);
+    assert.deepStrictEqual(exportNames, [
+      'RUNTIME_ADAPTER_SIDE_EFFECT_CONTRACT_STATUSES',
+      'RUNTIME_ADAPTER_SIDE_EFFECT_CONTRACT_TYPES',
+      'RUNTIME_ADAPTER_SIDE_EFFECT_FORBIDDEN_SURFACES',
+      'assertRuntimeAdapterSideEffectContractDoesNotGrantAuthority',
+      'classifyRuntimeAdapterSideEffectContractReadiness',
+      'createRuntimeAdapterSideEffectContractManifest',
+      'summarizeRuntimeAdapterSideEffectContractManifest',
+      'validateRuntimeAdapterSideEffectContractManifest',
+    ]);
+  }
+
+  testRuntimeAdapterSideEffectContractCreatesMetadataOnlyManifest();
+  testRuntimeAdapterSideEffectContractRejectsRuntimeExecution();
+  testRuntimeAdapterSideEffectContractRejectsToolExecution();
+  testRuntimeAdapterSideEffectContractRejectsFileWrites();
+  testRuntimeAdapterSideEffectContractRejectsProcessExecution();
+  testRuntimeAdapterSideEffectContractRejectsGitExecution();
+  testRuntimeAdapterSideEffectContractRequiresDenyByDefault();
+  testRuntimeAdapterSideEffectContractSummarizesNoAuthorityReadiness();
+}

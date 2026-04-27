@@ -7081,3 +7081,85 @@ testPacketSystemConsolidationRejectsImplicitSeamAdvancement();
 testPacketSystemConsolidationNoRuntimeExports();
 
 console.log("PacketSystemConsolidationImplementation v1 tests passed");
+
+/* NODEX_ADVISORY_FINDING_LOCAL_PROOF_ADOPTION_MANIFEST_TESTS_V1 */
+{
+  const assert = require('assert');
+  const advisoryFindingLocalProofAdoptionManifest = require('../core/advisoryFindingLocalProofAdoptionManifest');
+
+  function testAdvisoryFindingLocalProofAdoptionManifestCreatesMetadataOnlyManifest() {
+    const manifest = advisoryFindingLocalProofAdoptionManifest.createAdvisoryFindingLocalProofAdoptionManifest();
+    const validation = advisoryFindingLocalProofAdoptionManifest.validateAdvisoryFindingLocalProofAdoptionManifest(manifest);
+
+    assert.strictEqual(validation.valid, true);
+    assert.strictEqual(manifest.metadataOnly, true);
+    assert.strictEqual(manifest.authorityGranted, false);
+    assert.strictEqual(manifest.localEvidenceRequiredForAdoption, true);
+    assert.strictEqual(manifest.advisoryFindingsRemainNonAuthoritative, true);
+    assert.strictEqual(manifest.externalReviewAuthorityAllowed, false);
+    assert.strictEqual(manifest.deepResearchAuthorityAllowed, false);
+    assert.strictEqual(manifest.runtimeExecutionAllowed, false);
+    assert.strictEqual(manifest.toolExecutionAllowed, false);
+  }
+
+  function testAdvisoryFindingLocalProofAdoptionManifestRejectsMissingFindingControlMapping() {
+    const manifest = advisoryFindingLocalProofAdoptionManifest.createAdvisoryFindingLocalProofAdoptionManifest({
+      rows: [],
+    });
+    const validation = advisoryFindingLocalProofAdoptionManifest.validateAdvisoryFindingLocalProofAdoptionManifest(manifest);
+
+    assert.strictEqual(validation.valid, false);
+    assert.ok(validation.errors.some((error) => error.includes('missing required finding')));
+    assert.ok(validation.errors.some((error) => error.includes('missing required control')));
+  }
+
+  function testAdvisoryFindingLocalProofAdoptionManifestRejectsAuthorityGrants() {
+    const manifest = advisoryFindingLocalProofAdoptionManifest.createAdvisoryFindingLocalProofAdoptionManifest({
+      authorityGranted: true,
+      runtimeExecutionAllowed: true,
+      toolExecutionAllowed: true,
+    });
+    const validation = advisoryFindingLocalProofAdoptionManifest.validateAdvisoryFindingLocalProofAdoptionManifest(manifest);
+
+    assert.strictEqual(validation.valid, false);
+    assert.ok(validation.errors.includes('authorityGranted must be false'));
+    assert.ok(validation.errors.includes('runtimeExecutionAllowed must be false'));
+    assert.ok(validation.errors.includes('toolExecutionAllowed must be false'));
+  }
+
+  function testAdvisoryFindingLocalProofAdoptionManifestPreservesModelOutputProposalOnly() {
+    const manifest = advisoryFindingLocalProofAdoptionManifest.createAdvisoryFindingLocalProofAdoptionManifest();
+    const summary = advisoryFindingLocalProofAdoptionManifest.summarizeAdvisoryFindingLocalProofAdoptionManifest(manifest);
+
+    assert.strictEqual(summary.modelOutputRemainsProposalOnly, true);
+    assert.strictEqual(summary.externalReviewRemainsAdvisoryOnly, true);
+    assert.strictEqual(summary.deepResearchRemainsAdvisoryOnly, true);
+    assert.strictEqual(summary.authorityGranted, false);
+  }
+
+  function testAdvisoryFindingLocalProofAdoptionManifestSummarizesReadinessWithoutImplementationAuthority() {
+    const manifest = advisoryFindingLocalProofAdoptionManifest.createAdvisoryFindingLocalProofAdoptionManifest();
+    const classification = advisoryFindingLocalProofAdoptionManifest.classifyAdvisoryFindingLocalProofAdoptionReadiness(manifest);
+    const exportNames = Object.keys(advisoryFindingLocalProofAdoptionManifest).sort();
+
+    assert.strictEqual(classification.ready, true);
+    assert.strictEqual(classification.implementationAllowedNow, false);
+    assert.strictEqual(classification.authorityGranted, false);
+    assert.deepStrictEqual(exportNames, [
+      'ADVISORY_FINDING_LOCAL_PROOF_ADOPTION_AUTHORITY_STATES',
+      'ADVISORY_FINDING_LOCAL_PROOF_ADOPTION_REQUIRED_CONTROLS',
+      'ADVISORY_FINDING_LOCAL_PROOF_ADOPTION_REQUIRED_FINDINGS',
+      'assertAdvisoryFindingLocalProofAdoptionDoesNotGrantAuthority',
+      'classifyAdvisoryFindingLocalProofAdoptionReadiness',
+      'createAdvisoryFindingLocalProofAdoptionManifest',
+      'summarizeAdvisoryFindingLocalProofAdoptionManifest',
+      'validateAdvisoryFindingLocalProofAdoptionManifest',
+    ]);
+  }
+
+  testAdvisoryFindingLocalProofAdoptionManifestCreatesMetadataOnlyManifest();
+  testAdvisoryFindingLocalProofAdoptionManifestRejectsMissingFindingControlMapping();
+  testAdvisoryFindingLocalProofAdoptionManifestRejectsAuthorityGrants();
+  testAdvisoryFindingLocalProofAdoptionManifestPreservesModelOutputProposalOnly();
+  testAdvisoryFindingLocalProofAdoptionManifestSummarizesReadinessWithoutImplementationAuthority();
+}

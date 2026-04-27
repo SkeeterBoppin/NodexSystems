@@ -6826,3 +6826,141 @@ function testDryRunNonBypassabilityCensusNoRuntimeExports() {
     assert.strictEqual(Object.prototype.hasOwnProperty.call(mod, exportName), false);
   }
 }
+function testToolCapabilityRegistryCoverageValidation() {
+  const assert = require("assert");
+  const registry = require("../core/toolCapabilityRegistry");
+  const {
+    TOOL_CAPABILITY_REGISTRY_COVERAGE_STATUSES,
+    createToolCapabilityRegistryCoverage,
+    validateToolCapabilityRegistryCoverage,
+    classifyToolCapabilityRegistryCoverage,
+    assertToolCapabilityRegistryCoverageNotExecutable,
+    summarizeToolCapabilityRegistryCoverage
+  } = require("../core/toolCapabilityRegistryCoverageManifest");
+
+  const coverage = createToolCapabilityRegistryCoverage({
+    registryMetadata: {
+      present: true,
+      exportedKeys: Object.keys(registry).sort(),
+      callableExports: Object.keys(registry).filter((key) => typeof registry[key] === "function").sort(),
+      forbiddenExportsAbsent: true
+    }
+  });
+
+  const validation = validateToolCapabilityRegistryCoverage(coverage);
+  assert.strictEqual(validation.valid, true);
+  assert.deepStrictEqual(validation.errors, []);
+
+  const classification = classifyToolCapabilityRegistryCoverage(coverage);
+  assert.strictEqual(classification.status, TOOL_CAPABILITY_REGISTRY_COVERAGE_STATUSES.PASS);
+  assert.deepStrictEqual(classification.reasons, []);
+
+  assert.strictEqual(assertToolCapabilityRegistryCoverageNotExecutable(coverage), true);
+
+  const summary = summarizeToolCapabilityRegistryCoverage(coverage);
+  assert.strictEqual(summary.valid, true);
+  assert.strictEqual(summary.status, TOOL_CAPABILITY_REGISTRY_COVERAGE_STATUSES.PASS);
+  assert.strictEqual(summary.authorityGranted, false);
+}
+
+function testToolCapabilityRegistryCoverageRequiresRegistryMetadata() {
+  const assert = require("assert");
+  const {
+    createToolCapabilityRegistryCoverage,
+    validateToolCapabilityRegistryCoverage
+  } = require("../core/toolCapabilityRegistryCoverageManifest");
+
+  const coverage = createToolCapabilityRegistryCoverage({
+    registryMetadata: {
+      present: false,
+      exportedKeys: [],
+      callableExports: [],
+      forbiddenExportsAbsent: true
+    }
+  });
+
+  const validation = validateToolCapabilityRegistryCoverage(coverage);
+  assert.strictEqual(validation.valid, false);
+  assert.ok(validation.errors.includes("registryMetadata.present must be true"));
+}
+
+function testToolCapabilityRegistryCoverageBlocksToolExecution() {
+  const assert = require("assert");
+  const {
+    createToolCapabilityRegistryCoverage,
+    validateToolCapabilityRegistryCoverage
+  } = require("../core/toolCapabilityRegistryCoverageManifest");
+
+  const coverage = createToolCapabilityRegistryCoverage({
+    registryMetadata: {
+      present: true,
+      exportedKeys: [],
+      callableExports: [],
+      forbiddenExportsAbsent: true
+    },
+    boundary: {
+      toolExecutionAllowed: true
+    }
+  });
+
+  const validation = validateToolCapabilityRegistryCoverage(coverage);
+  assert.strictEqual(validation.valid, false);
+  assert.ok(validation.errors.includes("boundary must remain false: toolExecutionAllowed"));
+}
+
+function testToolCapabilityRegistryCoverageBlocksRuntimeExecution() {
+  const assert = require("assert");
+  const {
+    createToolCapabilityRegistryCoverage,
+    validateToolCapabilityRegistryCoverage
+  } = require("../core/toolCapabilityRegistryCoverageManifest");
+
+  const coverage = createToolCapabilityRegistryCoverage({
+    registryMetadata: {
+      present: true,
+      exportedKeys: [],
+      callableExports: [],
+      forbiddenExportsAbsent: true
+    },
+    boundary: {
+      runtimeExecutionAllowed: true
+    }
+  });
+
+  const validation = validateToolCapabilityRegistryCoverage(coverage);
+  assert.strictEqual(validation.valid, false);
+  assert.ok(validation.errors.includes("boundary must remain false: runtimeExecutionAllowed"));
+}
+
+function testToolCapabilityRegistryCoverageNoRuntimeExports() {
+  const assert = require("assert");
+  const mod = require("../core/toolCapabilityRegistryCoverageManifest");
+
+  const forbiddenExports = [
+    "executeTool",
+    "invokeTool",
+    "runTool",
+    "executeRuntime",
+    "runRuntime",
+    "invokeRuntime",
+    "writeRuntimeFile",
+    "spawnProcess",
+    "execProcess",
+    "grantPermission",
+    "wireAgentHandoffRunner",
+    "authorizeReplay",
+    "approveModelOutput"
+  ];
+
+  for (const exportName of forbiddenExports) {
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(mod, exportName), false);
+  }
+}
+
+testToolCapabilityRegistryCoverageValidation();
+testToolCapabilityRegistryCoverageRequiresRegistryMetadata();
+testToolCapabilityRegistryCoverageBlocksToolExecution();
+testToolCapabilityRegistryCoverageBlocksRuntimeExecution();
+testToolCapabilityRegistryCoverageNoRuntimeExports();
+
+console.log("ToolCapabilityRegistryCoverageImplementation v1 tests passed");

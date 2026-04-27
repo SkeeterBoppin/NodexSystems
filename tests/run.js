@@ -7323,3 +7323,125 @@ console.log("PacketSystemConsolidationImplementation v1 tests passed");
   testFirstExecutableScopeManifestRejectsAgentHandoffRuntimeWiring();
   testFirstExecutableScopeManifestSummarizesNoAuthorityReadiness();
 }
+/* NODEX_PACKET_HELPER_EXECUTION_AUTHORITY_BOUNDARY_TESTS_V1 */
+{
+  const assert = require('assert');
+  const packetHelperBoundary = require('../core/packetHelperExecutionAuthorityBoundaryManifest');
+
+  function testPacketHelperExecutionAuthorityBoundaryCreatesMetadataOnlyManifest() {
+    const manifest = packetHelperBoundary.createPacketHelperExecutionAuthorityBoundaryManifest();
+    const validation = packetHelperBoundary.validatePacketHelperExecutionAuthorityBoundaryManifest(manifest);
+    assert.strictEqual(validation.valid, true);
+    assert.strictEqual(manifest.metadataOnly, true);
+    assert.strictEqual(manifest.authorityGranted, false);
+    assert.strictEqual(manifest.operatorGateRequired, true);
+    assert.strictEqual(manifest.explicitUserRunRequired, true);
+    assert.strictEqual(manifest.packetHelperExecutionAllowed, false);
+    assert.strictEqual(manifest.commandExecutionAllowed, false);
+    assert.strictEqual(manifest.helperAutoRunAllowed, false);
+    assert.strictEqual(manifest.sourceMutationAllowedNow, false);
+    assert.strictEqual(manifest.runtimeExecutionAllowed, false);
+    assert.strictEqual(manifest.toolExecutionAllowed, false);
+    assert.strictEqual(manifest.processExecutionAllowed, false);
+    assert.strictEqual(manifest.gitExecutionAllowedByNodex, false);
+    assert.strictEqual(manifest.permissionGrantsAllowed, false);
+  }
+
+  function testPacketHelperExecutionAuthorityBoundaryRejectsAutoRun() {
+    const manifest = packetHelperBoundary.createPacketHelperExecutionAuthorityBoundaryManifest({ helperAutoRunAllowed: true, automaticPacketExecutionAllowed: true, backgroundExecutionAllowed: true });
+    const validation = packetHelperBoundary.validatePacketHelperExecutionAuthorityBoundaryManifest(manifest);
+    assert.strictEqual(validation.valid, false);
+    assert.ok(validation.errors.includes('helperAutoRunAllowed must be false'));
+    assert.ok(validation.errors.includes('automaticPacketExecutionAllowed must be false'));
+    assert.ok(validation.errors.includes('backgroundExecutionAllowed must be false'));
+  }
+
+  function testPacketHelperExecutionAuthorityBoundaryRejectsCommandExecution() {
+    const manifest = packetHelperBoundary.createPacketHelperExecutionAuthorityBoundaryManifest({ commandExecutionAllowed: true, automaticCommandExecutionAllowed: true, boundaryRows: [{ ...packetHelperBoundary.createPacketHelperExecutionAuthorityBoundaryManifest().boundaryRows[0], commandExecutionAllowed: true }] });
+    const validation = packetHelperBoundary.validatePacketHelperExecutionAuthorityBoundaryManifest(manifest);
+    assert.strictEqual(validation.valid, false);
+    assert.ok(validation.errors.includes('commandExecutionAllowed must be false'));
+    assert.ok(validation.errors.includes('automaticCommandExecutionAllowed must be false'));
+    assert.ok(validation.errors.includes('boundaryRows[0].commandExecutionAllowed must be false'));
+  }
+
+  function testPacketHelperExecutionAuthorityBoundaryRejectsSourceMutation() {
+    const manifest = packetHelperBoundary.createPacketHelperExecutionAuthorityBoundaryManifest({ sourceMutationAllowedNow: true, boundaryRows: [{ ...packetHelperBoundary.createPacketHelperExecutionAuthorityBoundaryManifest().boundaryRows[0], sourceMutationAllowedNow: true }] });
+    const validation = packetHelperBoundary.validatePacketHelperExecutionAuthorityBoundaryManifest(manifest);
+    assert.strictEqual(validation.valid, false);
+    assert.ok(validation.errors.includes('sourceMutationAllowedNow must be false'));
+    assert.ok(validation.errors.includes('boundaryRows[0].sourceMutationAllowedNow must be false'));
+  }
+
+  function testPacketHelperExecutionAuthorityBoundaryRejectsGitExecution() {
+    const manifest = packetHelperBoundary.createPacketHelperExecutionAuthorityBoundaryManifest({ gitExecutionAllowedByNodex: true, boundaryRows: [{ ...packetHelperBoundary.createPacketHelperExecutionAuthorityBoundaryManifest().boundaryRows[0], gitExecutionAllowedByNodex: true }] });
+    const validation = packetHelperBoundary.validatePacketHelperExecutionAuthorityBoundaryManifest(manifest);
+    assert.strictEqual(validation.valid, false);
+    assert.ok(validation.errors.includes('gitExecutionAllowedByNodex must be false'));
+    assert.ok(validation.errors.includes('boundaryRows[0].gitExecutionAllowedByNodex must be false'));
+  }
+
+  function testPacketHelperExecutionAuthorityBoundaryRejectsPermissionGrants() {
+    const manifest = packetHelperBoundary.createPacketHelperExecutionAuthorityBoundaryManifest({ permissionGrantsAllowed: true, boundaryRows: [{ ...packetHelperBoundary.createPacketHelperExecutionAuthorityBoundaryManifest().boundaryRows[0], permissionGrantsAllowed: true }] });
+    const validation = packetHelperBoundary.validatePacketHelperExecutionAuthorityBoundaryManifest(manifest);
+    assert.strictEqual(validation.valid, false);
+    assert.ok(validation.errors.includes('permissionGrantsAllowed must be false'));
+    assert.ok(validation.errors.includes('boundaryRows[0].permissionGrantsAllowed must be false'));
+  }
+
+  function testPacketHelperExecutionAuthorityBoundaryRequiresOperatorGate() {
+    const manifest = packetHelperBoundary.createPacketHelperExecutionAuthorityBoundaryManifest({ operatorGateRequired: false, explicitUserRunRequired: false, boundaryRows: [{ ...packetHelperBoundary.createPacketHelperExecutionAuthorityBoundaryManifest().boundaryRows[0], operatorGateRequired: false, explicitUserRunRequired: false }] });
+    const validation = packetHelperBoundary.validatePacketHelperExecutionAuthorityBoundaryManifest(manifest);
+    assert.strictEqual(validation.valid, false);
+    assert.ok(validation.errors.includes('operatorGateRequired must be true'));
+    assert.ok(validation.errors.includes('explicitUserRunRequired must be true'));
+    assert.ok(validation.errors.includes('boundaryRows[0].operatorGateRequired must be true'));
+    assert.ok(validation.errors.includes('boundaryRows[0].explicitUserRunRequired must be true'));
+  }
+
+  function testPacketHelperExecutionAuthorityBoundarySummarizesNoAuthorityReadiness() {
+    const manifest = packetHelperBoundary.createPacketHelperExecutionAuthorityBoundaryManifest();
+    const summary = packetHelperBoundary.summarizePacketHelperExecutionAuthorityBoundaryManifest(manifest);
+    const classification = packetHelperBoundary.classifyPacketHelperExecutionAuthorityBoundaryReadiness(manifest);
+    const exportNames = Object.keys(packetHelperBoundary).sort();
+    assert.strictEqual(summary.metadataOnly, true);
+    assert.strictEqual(summary.authorityGranted, false);
+    assert.strictEqual(summary.operatorGateRequired, true);
+    assert.strictEqual(summary.explicitUserRunRequired, true);
+    assert.strictEqual(summary.implementationAllowedNow, false);
+    assert.strictEqual(summary.sourceMutationAllowedNow, false);
+    assert.strictEqual(summary.packetHelperExecutionAllowed, false);
+    assert.strictEqual(summary.commandExecutionAllowed, false);
+    assert.strictEqual(summary.helperAutoRunAllowed, false);
+    assert.strictEqual(summary.automaticPacketExecutionAllowed, false);
+    assert.strictEqual(summary.automaticCommandExecutionAllowed, false);
+    assert.strictEqual(summary.backgroundExecutionAllowed, false);
+    assert.strictEqual(summary.runtimeExecutionAllowed, false);
+    assert.strictEqual(summary.toolExecutionAllowed, false);
+    assert.strictEqual(summary.processExecutionAllowed, false);
+    assert.strictEqual(summary.gitExecutionAllowedByNodex, false);
+    assert.strictEqual(summary.permissionGrantsAllowed, false);
+    assert.strictEqual(summary.agentHandoffRuntimeWiringAllowed, false);
+    assert.strictEqual(classification.ready, true);
+    assert.strictEqual(classification.authorityGranted, false);
+    assert.deepStrictEqual(exportNames, [
+      'PACKET_HELPER_EXECUTION_AUTHORITY_BOUNDARY_STATUSES',
+      'PACKET_HELPER_EXECUTION_AUTHORITY_BOUNDARY_TYPES',
+      'PACKET_HELPER_EXECUTION_AUTHORITY_FORBIDDEN_SURFACES',
+      'assertPacketHelperExecutionAuthorityBoundaryDoesNotGrantAuthority',
+      'classifyPacketHelperExecutionAuthorityBoundaryReadiness',
+      'createPacketHelperExecutionAuthorityBoundaryManifest',
+      'summarizePacketHelperExecutionAuthorityBoundaryManifest',
+      'validatePacketHelperExecutionAuthorityBoundaryManifest',
+    ]);
+  }
+
+  testPacketHelperExecutionAuthorityBoundaryCreatesMetadataOnlyManifest();
+  testPacketHelperExecutionAuthorityBoundaryRejectsAutoRun();
+  testPacketHelperExecutionAuthorityBoundaryRejectsCommandExecution();
+  testPacketHelperExecutionAuthorityBoundaryRejectsSourceMutation();
+  testPacketHelperExecutionAuthorityBoundaryRejectsGitExecution();
+  testPacketHelperExecutionAuthorityBoundaryRejectsPermissionGrants();
+  testPacketHelperExecutionAuthorityBoundaryRequiresOperatorGate();
+  testPacketHelperExecutionAuthorityBoundarySummarizesNoAuthorityReadiness();
+}

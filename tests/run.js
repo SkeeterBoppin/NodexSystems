@@ -6964,3 +6964,120 @@ testToolCapabilityRegistryCoverageBlocksRuntimeExecution();
 testToolCapabilityRegistryCoverageNoRuntimeExports();
 
 console.log("ToolCapabilityRegistryCoverageImplementation v1 tests passed");
+function testPacketSystemConsolidationManifestValidation() {
+  const assert = require("assert");
+  const {
+    PACKET_SYSTEM_CONSOLIDATION_STATUSES,
+    PACKET_SYSTEM_CONSOLIDATION_BLOCKED_CAPABILITIES,
+    PACKET_SYSTEM_CONSOLIDATION_REQUIRED_CAPABILITIES,
+    createPacketSystemConsolidationManifest,
+    validatePacketSystemConsolidationManifest,
+    classifyPacketSystemConsolidationManifest,
+    assertPacketSystemConsolidationNotAuthority,
+    summarizePacketSystemConsolidationManifest
+  } = require("../core/packetSystemConsolidationManifest");
+
+  const manifest = createPacketSystemConsolidationManifest();
+
+  const validation = validatePacketSystemConsolidationManifest(manifest);
+  assert.strictEqual(validation.valid, true);
+  assert.deepStrictEqual(validation.errors, []);
+
+  const classification = classifyPacketSystemConsolidationManifest(manifest);
+  assert.strictEqual(classification.status, PACKET_SYSTEM_CONSOLIDATION_STATUSES.PASS);
+  assert.deepStrictEqual(classification.reasons, []);
+
+  assert.strictEqual(assertPacketSystemConsolidationNotAuthority(manifest), true);
+
+  const summary = summarizePacketSystemConsolidationManifest(manifest);
+  assert.strictEqual(summary.valid, true);
+  assert.strictEqual(summary.status, PACKET_SYSTEM_CONSOLIDATION_STATUSES.PASS);
+  assert.strictEqual(summary.authorityGranted, false);
+  assert.strictEqual(summary.metadataOnly, true);
+  assert.strictEqual(summary.requiredCapabilityCount, PACKET_SYSTEM_CONSOLIDATION_REQUIRED_CAPABILITIES.length);
+  assert.strictEqual(summary.blockedCapabilityCount, PACKET_SYSTEM_CONSOLIDATION_BLOCKED_CAPABILITIES.length);
+}
+
+function testPacketSystemConsolidationRequiresRequiredCapabilities() {
+  const assert = require("assert");
+  const {
+    createPacketSystemConsolidationManifest,
+    validatePacketSystemConsolidationManifest
+  } = require("../core/packetSystemConsolidationManifest");
+
+  const manifest = createPacketSystemConsolidationManifest({
+    requiredCapabilities: ["capture_command_with_stdout_stderr"]
+  });
+
+  const validation = validatePacketSystemConsolidationManifest(manifest);
+  assert.strictEqual(validation.valid, false);
+  assert.ok(validation.errors.includes("requiredCapabilities must include every required consolidation capability"));
+}
+
+function testPacketSystemConsolidationRejectsRuntimeAuthority() {
+  const assert = require("assert");
+  const {
+    createPacketSystemConsolidationManifest,
+    validatePacketSystemConsolidationManifest
+  } = require("../core/packetSystemConsolidationManifest");
+
+  const manifest = createPacketSystemConsolidationManifest({
+    boundary: {
+      runtimeExecutionAllowed: true
+    }
+  });
+
+  const validation = validatePacketSystemConsolidationManifest(manifest);
+  assert.strictEqual(validation.valid, false);
+  assert.ok(validation.errors.includes("boundary must remain false: runtimeExecutionAllowed"));
+}
+
+function testPacketSystemConsolidationRejectsImplicitSeamAdvancement() {
+  const assert = require("assert");
+  const {
+    createPacketSystemConsolidationManifest,
+    validatePacketSystemConsolidationManifest
+  } = require("../core/packetSystemConsolidationManifest");
+
+  const manifest = {
+    ...createPacketSystemConsolidationManifest(),
+    implicitSeamAdvancementAllowed: true
+  };
+
+  const validation = validatePacketSystemConsolidationManifest(manifest);
+  assert.strictEqual(validation.valid, false);
+  assert.ok(validation.errors.includes("implicitSeamAdvancementAllowed must remain false"));
+}
+
+function testPacketSystemConsolidationNoRuntimeExports() {
+  const assert = require("assert");
+  const mod = require("../core/packetSystemConsolidationManifest");
+
+  const forbiddenExports = [
+    "executeTool",
+    "invokeTool",
+    "runTool",
+    "executeRuntime",
+    "runRuntime",
+    "invokeRuntime",
+    "writeRuntimeFile",
+    "spawnProcess",
+    "execProcess",
+    "grantPermission",
+    "wireAgentHandoffRunner",
+    "authorizeReplay",
+    "approveModelOutput"
+  ];
+
+  for (const exportName of forbiddenExports) {
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(mod, exportName), false);
+  }
+}
+
+testPacketSystemConsolidationManifestValidation();
+testPacketSystemConsolidationRequiresRequiredCapabilities();
+testPacketSystemConsolidationRejectsRuntimeAuthority();
+testPacketSystemConsolidationRejectsImplicitSeamAdvancement();
+testPacketSystemConsolidationNoRuntimeExports();
+
+console.log("PacketSystemConsolidationImplementation v1 tests passed");

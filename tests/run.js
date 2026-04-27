@@ -7656,3 +7656,175 @@ console.log("PacketSystemConsolidationImplementation v1 tests passed");
   testRuntimeAdapterSideEffectContractRequiresDenyByDefault();
   testRuntimeAdapterSideEffectContractSummarizesNoAuthorityReadiness();
 }
+/* NODEX_PROOF_CLAIM_LAYER_TESTS_V1 */
+{
+  const assert = require('assert');
+  const proofClaimLayer = require('../core/proofClaimLayerManifest');
+
+  function testProofClaimLayerCreatesMetadataOnlyManifest() {
+    const manifest = proofClaimLayer.createProofClaimLayerManifest();
+    const validation = proofClaimLayer.validateProofClaimLayerManifest(manifest);
+
+    assert.strictEqual(validation.valid, true);
+    assert.strictEqual(manifest.metadataOnly, true);
+    assert.strictEqual(manifest.authorityGranted, false);
+    assert.strictEqual(manifest.localEvidenceRequired, true);
+    assert.strictEqual(manifest.deterministicValidationRequired, true);
+    assert.strictEqual(manifest.modelOutputAuthorityAllowed, false);
+    assert.strictEqual(manifest.proofClaimPromotionAuthorityAllowed, false);
+    assert.strictEqual(manifest.runtimeExecutionAllowed, false);
+    assert.strictEqual(manifest.toolExecutionAllowed, false);
+  }
+
+  function testProofClaimLayerRequiresLocalEvidenceReferences() {
+    const manifest = proofClaimLayer.createProofClaimLayerManifest({
+      claims: [
+        {
+          ...proofClaimLayer.createProofClaimLayerManifest().claims[0],
+          localEvidenceRefs: [],
+        },
+      ],
+    });
+    const validation = proofClaimLayer.validateProofClaimLayerManifest(manifest);
+
+    assert.strictEqual(validation.valid, false);
+    assert.ok(validation.errors.includes('claims[0].localEvidenceRefs must be a non-empty array'));
+  }
+
+  function testProofClaimLayerRejectsModelOutputAuthority() {
+    const manifest = proofClaimLayer.createProofClaimLayerManifest({
+      modelOutputAuthorityAllowed: true,
+      claims: [
+        {
+          ...proofClaimLayer.createProofClaimLayerManifest().claims[0],
+          modelOutputAuthorityAllowed: true,
+        },
+      ],
+    });
+    const validation = proofClaimLayer.validateProofClaimLayerManifest(manifest);
+
+    assert.strictEqual(validation.valid, false);
+    assert.ok(validation.errors.includes('modelOutputAuthorityAllowed must be false'));
+    assert.ok(validation.errors.includes('claims[0].modelOutputAuthorityAllowed must be false'));
+  }
+
+  function testProofClaimLayerRejectsExternalReviewAuthority() {
+    const manifest = proofClaimLayer.createProofClaimLayerManifest({
+      externalReviewAuthorityAllowed: true,
+      deepResearchAuthorityAllowed: true,
+      claims: [
+        {
+          ...proofClaimLayer.createProofClaimLayerManifest().claims[0],
+          externalReviewAuthorityAllowed: true,
+          deepResearchAuthorityAllowed: true,
+        },
+      ],
+    });
+    const validation = proofClaimLayer.validateProofClaimLayerManifest(manifest);
+
+    assert.strictEqual(validation.valid, false);
+    assert.ok(validation.errors.includes('externalReviewAuthorityAllowed must be false'));
+    assert.ok(validation.errors.includes('deepResearchAuthorityAllowed must be false'));
+    assert.ok(validation.errors.includes('claims[0].externalReviewAuthorityAllowed must be false'));
+    assert.ok(validation.errors.includes('claims[0].deepResearchAuthorityAllowed must be false'));
+  }
+
+  function testProofClaimLayerRejectsRuntimeAndToolAuthority() {
+    const manifest = proofClaimLayer.createProofClaimLayerManifest({
+      runtimeExecutionAllowed: true,
+      toolExecutionAllowed: true,
+      claims: [
+        {
+          ...proofClaimLayer.createProofClaimLayerManifest().claims[0],
+          runtimeExecutionAllowed: true,
+          toolExecutionAllowed: true,
+        },
+      ],
+    });
+    const validation = proofClaimLayer.validateProofClaimLayerManifest(manifest);
+
+    assert.strictEqual(validation.valid, false);
+    assert.ok(validation.errors.includes('runtimeExecutionAllowed must be false'));
+    assert.ok(validation.errors.includes('toolExecutionAllowed must be false'));
+    assert.ok(validation.errors.includes('claims[0].runtimeExecutionAllowed must be false'));
+    assert.ok(validation.errors.includes('claims[0].toolExecutionAllowed must be false'));
+  }
+
+  function testProofClaimLayerRejectsUnsupportedClaimAsProof() {
+    const manifest = proofClaimLayer.createProofClaimLayerManifest({
+      claims: [
+        {
+          ...proofClaimLayer.createProofClaimLayerManifest().claims[0],
+          authorityGranted: true,
+          proofClaimPromotionAuthorityAllowed: true,
+          status: proofClaimLayer.PROOF_CLAIM_LAYER_STATUSES.UNPROVEN,
+        },
+      ],
+    });
+    const validation = proofClaimLayer.validateProofClaimLayerManifest(manifest);
+
+    assert.strictEqual(validation.valid, false);
+    assert.ok(validation.errors.includes('claims[0].authorityGranted must be false'));
+    assert.ok(validation.errors.includes('claims[0].proofClaimPromotionAuthorityAllowed must be false'));
+    assert.ok(validation.errors.includes('claims[0] unproven claim cannot grant authority'));
+  }
+
+  function testProofClaimLayerRequiresDeterministicClaimStatus() {
+    const manifest = proofClaimLayer.createProofClaimLayerManifest({
+      claims: [
+        {
+          ...proofClaimLayer.createProofClaimLayerManifest().claims[0],
+          status: 'maybe',
+        },
+      ],
+    });
+    const validation = proofClaimLayer.validateProofClaimLayerManifest(manifest);
+
+    assert.strictEqual(validation.valid, false);
+    assert.ok(validation.errors.includes('claims[0].status must be recognized'));
+  }
+
+  function testProofClaimLayerSummarizesNoAuthorityReadiness() {
+    const manifest = proofClaimLayer.createProofClaimLayerManifest();
+    const summary = proofClaimLayer.summarizeProofClaimLayerManifest(manifest);
+    const classification = proofClaimLayer.classifyProofClaimLayerReadiness(manifest);
+    const exportNames = Object.keys(proofClaimLayer).sort();
+
+    assert.strictEqual(summary.metadataOnly, true);
+    assert.strictEqual(summary.authorityGranted, false);
+    assert.strictEqual(summary.localEvidenceRequired, true);
+    assert.strictEqual(summary.deterministicValidationRequired, true);
+    assert.strictEqual(summary.unsupportedClaimPromotionBlocked, true);
+    assert.strictEqual(summary.unverifiedEvidencePromotionBlocked, true);
+    assert.strictEqual(summary.contradictedClaimPromotionBlocked, true);
+    assert.strictEqual(summary.implementationAllowedNow, false);
+    assert.strictEqual(summary.sourceMutationAllowedNow, false);
+    assert.strictEqual(summary.modelOutputAuthorityAllowed, false);
+    assert.strictEqual(summary.proofClaimPromotionAuthorityAllowed, false);
+    assert.strictEqual(summary.externalReviewAuthorityAllowed, false);
+    assert.strictEqual(summary.deepResearchAuthorityAllowed, false);
+    assert.strictEqual(summary.runtimeExecutionAllowed, false);
+    assert.strictEqual(summary.toolExecutionAllowed, false);
+    assert.strictEqual(classification.ready, true);
+    assert.strictEqual(classification.authorityGranted, false);
+    assert.deepStrictEqual(exportNames, [
+      'PROOF_CLAIM_LAYER_CLAIM_TYPES',
+      'PROOF_CLAIM_LAYER_FORBIDDEN_SURFACES',
+      'PROOF_CLAIM_LAYER_STATUSES',
+      'assertProofClaimLayerDoesNotGrantAuthority',
+      'classifyProofClaimLayerReadiness',
+      'createProofClaimLayerManifest',
+      'summarizeProofClaimLayerManifest',
+      'validateProofClaimLayerManifest',
+    ]);
+  }
+
+  testProofClaimLayerCreatesMetadataOnlyManifest();
+  testProofClaimLayerRequiresLocalEvidenceReferences();
+  testProofClaimLayerRejectsModelOutputAuthority();
+  testProofClaimLayerRejectsExternalReviewAuthority();
+  testProofClaimLayerRejectsRuntimeAndToolAuthority();
+  testProofClaimLayerRejectsUnsupportedClaimAsProof();
+  testProofClaimLayerRequiresDeterministicClaimStatus();
+  testProofClaimLayerSummarizesNoAuthorityReadiness();
+}

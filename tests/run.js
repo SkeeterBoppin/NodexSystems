@@ -1,4 +1,4 @@
-﻿const assert = require("assert");
+const assert = require("assert");
 const {
   RUNTIME_DRY_RUN_EXECUTION_PATH_STATUSES,
   RUNTIME_DRY_RUN_EXECUTION_PATH_BLOCKED_REASONS,
@@ -6683,5 +6683,146 @@ function testRuntimeDryRunExecutionPathNoRuntimeExports() {
   testModelOutputProposalAuthoritySplitPreservesBoundaryFalse();
   testModelOutputProposalAuthoritySplitNoRuntimeExports();
 
-  console.log("ModelOutputProposalAuthoritySplitImplementation v1 tests passed");
+  testDryRunNonBypassabilityCensusValidation();
+testDryRunNonBypassabilityCensusRequiresDryRunExecutionPath();
+testDryRunNonBypassabilityCensusBlocksRuntimeBypass();
+testDryRunNonBypassabilityCensusBlocksAgentHandoffRuntimeWiring();
+testDryRunNonBypassabilityCensusNoRuntimeExports();
+console.log("ModelOutputProposalAuthoritySplitImplementation v1 tests passed");
 })();
+function testDryRunNonBypassabilityCensusValidation() {
+  const assert = require("assert");
+  const {
+    DRY_RUN_NONBYPASSABILITY_CENSUS_STATUSES,
+    createDryRunNonBypassabilityCensus,
+    validateDryRunNonBypassabilityCensus,
+    classifyDryRunNonBypassabilityCensus,
+    assertDryRunNonBypassabilityCensusNotBypassable,
+    summarizeDryRunNonBypassabilityCensus
+  } = require("../core/dryRunNonBypassabilityCensusManifest");
+
+  const census = createDryRunNonBypassabilityCensus({
+    dependencies: {
+      runtimeDryRunExecutionPath: true,
+      runtimeIntegrationPlanExecutorDryRunPath: true,
+      runtimeDryRunContract: true
+    },
+    bypassChecks: {
+      dryRunClassificationOnly: true
+    }
+  });
+
+  const validation = validateDryRunNonBypassabilityCensus(census);
+  assert.strictEqual(validation.valid, true);
+  assert.deepStrictEqual(validation.errors, []);
+
+  const classification = classifyDryRunNonBypassabilityCensus(census);
+  assert.strictEqual(classification.status, DRY_RUN_NONBYPASSABILITY_CENSUS_STATUSES.PASS);
+  assert.deepStrictEqual(classification.reasons, []);
+
+  assert.strictEqual(assertDryRunNonBypassabilityCensusNotBypassable(census), true);
+
+  const summary = summarizeDryRunNonBypassabilityCensus(census);
+  assert.strictEqual(summary.valid, true);
+  assert.strictEqual(summary.status, DRY_RUN_NONBYPASSABILITY_CENSUS_STATUSES.PASS);
+  assert.strictEqual(summary.authorityGranted, false);
+}
+
+function testDryRunNonBypassabilityCensusRequiresDryRunExecutionPath() {
+  const assert = require("assert");
+  const {
+    createDryRunNonBypassabilityCensus,
+    validateDryRunNonBypassabilityCensus
+  } = require("../core/dryRunNonBypassabilityCensusManifest");
+
+  const census = createDryRunNonBypassabilityCensus({
+    dependencies: {
+      runtimeDryRunExecutionPath: false,
+      runtimeIntegrationPlanExecutorDryRunPath: true,
+      runtimeDryRunContract: true
+    },
+    bypassChecks: {
+      dryRunClassificationOnly: true
+    }
+  });
+
+  const validation = validateDryRunNonBypassabilityCensus(census);
+  assert.strictEqual(validation.valid, false);
+  assert.ok(validation.errors.includes("dependency must be present: runtimeDryRunExecutionPath"));
+}
+
+function testDryRunNonBypassabilityCensusBlocksRuntimeBypass() {
+  const assert = require("assert");
+  const {
+    createDryRunNonBypassabilityCensus,
+    validateDryRunNonBypassabilityCensus
+  } = require("../core/dryRunNonBypassabilityCensusManifest");
+
+  const census = createDryRunNonBypassabilityCensus({
+    dependencies: {
+      runtimeDryRunExecutionPath: true,
+      runtimeIntegrationPlanExecutorDryRunPath: true,
+      runtimeDryRunContract: true
+    },
+    boundary: {
+      runtimeExecutionAllowed: true
+    },
+    bypassChecks: {
+      dryRunClassificationOnly: true
+    }
+  });
+
+  const validation = validateDryRunNonBypassabilityCensus(census);
+  assert.strictEqual(validation.valid, false);
+  assert.ok(validation.errors.includes("boundary must remain false: runtimeExecutionAllowed"));
+}
+
+function testDryRunNonBypassabilityCensusBlocksAgentHandoffRuntimeWiring() {
+  const assert = require("assert");
+  const {
+    createDryRunNonBypassabilityCensus,
+    validateDryRunNonBypassabilityCensus
+  } = require("../core/dryRunNonBypassabilityCensusManifest");
+
+  const census = createDryRunNonBypassabilityCensus({
+    dependencies: {
+      runtimeDryRunExecutionPath: true,
+      runtimeIntegrationPlanExecutorDryRunPath: true,
+      runtimeDryRunContract: true
+    },
+    boundary: {
+      agentHandoffRuntimeWiringAllowed: true
+    },
+    bypassChecks: {
+      dryRunClassificationOnly: true
+    }
+  });
+
+  const validation = validateDryRunNonBypassabilityCensus(census);
+  assert.strictEqual(validation.valid, false);
+  assert.ok(validation.errors.includes("boundary must remain false: agentHandoffRuntimeWiringAllowed"));
+}
+
+function testDryRunNonBypassabilityCensusNoRuntimeExports() {
+  const assert = require("assert");
+  const mod = require("../core/dryRunNonBypassabilityCensusManifest");
+
+  const forbiddenExports = [
+    "executeRuntime",
+    "runRuntime",
+    "invokeRuntime",
+    "executeTool",
+    "invokeTool",
+    "writeRuntimeFile",
+    "spawnProcess",
+    "execProcess",
+    "grantPermission",
+    "wireAgentHandoffRunner",
+    "authorizeReplay",
+    "approveModelOutput"
+  ];
+
+  for (const exportName of forbiddenExports) {
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(mod, exportName), false);
+  }
+}

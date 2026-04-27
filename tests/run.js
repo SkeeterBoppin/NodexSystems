@@ -7163,3 +7163,163 @@ console.log("PacketSystemConsolidationImplementation v1 tests passed");
   testAdvisoryFindingLocalProofAdoptionManifestPreservesModelOutputProposalOnly();
   testAdvisoryFindingLocalProofAdoptionManifestSummarizesReadinessWithoutImplementationAuthority();
 }
+/* NODEX_FIRST_EXECUTABLE_SCOPE_MANIFEST_TESTS_V1 */
+{
+  const assert = require('assert');
+  const firstExecutableScopeManifest = require('../core/firstExecutableScopeManifest');
+
+  function testFirstExecutableScopeManifestCreatesMetadataOnlyManifest() {
+    const manifest = firstExecutableScopeManifest.createFirstExecutableScopeManifest();
+    const validation = firstExecutableScopeManifest.validateFirstExecutableScopeManifest(manifest);
+
+    assert.strictEqual(validation.valid, true);
+    assert.strictEqual(manifest.metadataOnly, true);
+    assert.strictEqual(manifest.authorityGranted, false);
+    assert.strictEqual(manifest.runtimeExecutionAllowed, false);
+    assert.strictEqual(manifest.toolExecutionAllowed, false);
+    assert.strictEqual(manifest.runtimeFileWritesAllowed, false);
+    assert.strictEqual(manifest.processExecutionAllowed, false);
+    assert.strictEqual(manifest.gitExecutionAllowedByNodex, false);
+    assert.strictEqual(manifest.permissionGrantsAllowed, false);
+    assert.strictEqual(manifest.agentHandoffRuntimeWiringAllowed, false);
+    assert.strictEqual(manifest.packetHelperExecutionAllowed, false);
+  }
+
+  function testFirstExecutableScopeManifestRejectsExecutionAuthority() {
+    const manifest = firstExecutableScopeManifest.createFirstExecutableScopeManifest({
+      runtimeExecutionAllowed: true,
+      toolExecutionAllowed: true,
+    });
+    const validation = firstExecutableScopeManifest.validateFirstExecutableScopeManifest(manifest);
+
+    assert.strictEqual(validation.valid, false);
+    assert.ok(validation.errors.includes('runtimeExecutionAllowed must be false'));
+    assert.ok(validation.errors.includes('toolExecutionAllowed must be false'));
+  }
+
+  function testFirstExecutableScopeManifestRejectsFileWrites() {
+    const manifest = firstExecutableScopeManifest.createFirstExecutableScopeManifest({
+      runtimeFileWritesAllowed: true,
+      candidateScopes: [
+        {
+          ...firstExecutableScopeManifest.createFirstExecutableScopeManifest().candidateScopes[0],
+          runtimeFileWritesAllowed: true,
+        },
+      ],
+    });
+    const validation = firstExecutableScopeManifest.validateFirstExecutableScopeManifest(manifest);
+
+    assert.strictEqual(validation.valid, false);
+    assert.ok(validation.errors.includes('runtimeFileWritesAllowed must be false'));
+    assert.ok(validation.errors.includes('candidateScopes[0].runtimeFileWritesAllowed must be false'));
+  }
+
+  function testFirstExecutableScopeManifestRejectsProcessExecution() {
+    const manifest = firstExecutableScopeManifest.createFirstExecutableScopeManifest({
+      processExecutionAllowed: true,
+      candidateScopes: [
+        {
+          ...firstExecutableScopeManifest.createFirstExecutableScopeManifest().candidateScopes[0],
+          processExecutionAllowed: true,
+        },
+      ],
+    });
+    const validation = firstExecutableScopeManifest.validateFirstExecutableScopeManifest(manifest);
+
+    assert.strictEqual(validation.valid, false);
+    assert.ok(validation.errors.includes('processExecutionAllowed must be false'));
+    assert.ok(validation.errors.includes('candidateScopes[0].processExecutionAllowed must be false'));
+  }
+
+  function testFirstExecutableScopeManifestRejectsGitExecution() {
+    const manifest = firstExecutableScopeManifest.createFirstExecutableScopeManifest({
+      gitExecutionAllowedByNodex: true,
+      candidateScopes: [
+        {
+          ...firstExecutableScopeManifest.createFirstExecutableScopeManifest().candidateScopes[0],
+          gitExecutionAllowedByNodex: true,
+        },
+      ],
+    });
+    const validation = firstExecutableScopeManifest.validateFirstExecutableScopeManifest(manifest);
+
+    assert.strictEqual(validation.valid, false);
+    assert.ok(validation.errors.includes('gitExecutionAllowedByNodex must be false'));
+    assert.ok(validation.errors.includes('candidateScopes[0].gitExecutionAllowedByNodex must be false'));
+  }
+
+  function testFirstExecutableScopeManifestRejectsPermissionGrants() {
+    const manifest = firstExecutableScopeManifest.createFirstExecutableScopeManifest({
+      permissionGrantsAllowed: true,
+      candidateScopes: [
+        {
+          ...firstExecutableScopeManifest.createFirstExecutableScopeManifest().candidateScopes[0],
+          permissionGrantsAllowed: true,
+        },
+      ],
+    });
+    const validation = firstExecutableScopeManifest.validateFirstExecutableScopeManifest(manifest);
+
+    assert.strictEqual(validation.valid, false);
+    assert.ok(validation.errors.includes('permissionGrantsAllowed must be false'));
+    assert.ok(validation.errors.includes('candidateScopes[0].permissionGrantsAllowed must be false'));
+  }
+
+  function testFirstExecutableScopeManifestRejectsAgentHandoffRuntimeWiring() {
+    const manifest = firstExecutableScopeManifest.createFirstExecutableScopeManifest({
+      agentHandoffRuntimeWiringAllowed: true,
+      candidateScopes: [
+        {
+          ...firstExecutableScopeManifest.createFirstExecutableScopeManifest().candidateScopes[0],
+          agentHandoffRuntimeWiringAllowed: true,
+        },
+      ],
+    });
+    const validation = firstExecutableScopeManifest.validateFirstExecutableScopeManifest(manifest);
+
+    assert.strictEqual(validation.valid, false);
+    assert.ok(validation.errors.includes('agentHandoffRuntimeWiringAllowed must be false'));
+    assert.ok(validation.errors.includes('candidateScopes[0].agentHandoffRuntimeWiringAllowed must be false'));
+  }
+
+  function testFirstExecutableScopeManifestSummarizesNoAuthorityReadiness() {
+    const manifest = firstExecutableScopeManifest.createFirstExecutableScopeManifest();
+    const summary = firstExecutableScopeManifest.summarizeFirstExecutableScopeManifest(manifest);
+    const classification = firstExecutableScopeManifest.classifyFirstExecutableScopeReadiness(manifest);
+    const exportNames = Object.keys(firstExecutableScopeManifest).sort();
+
+    assert.strictEqual(summary.metadataOnly, true);
+    assert.strictEqual(summary.authorityGranted, false);
+    assert.strictEqual(summary.implementationAllowedNow, false);
+    assert.strictEqual(summary.sourceMutationAllowedNow, false);
+    assert.strictEqual(summary.runtimeExecutionAllowed, false);
+    assert.strictEqual(summary.toolExecutionAllowed, false);
+    assert.strictEqual(summary.runtimeFileWritesAllowed, false);
+    assert.strictEqual(summary.processExecutionAllowed, false);
+    assert.strictEqual(summary.gitExecutionAllowedByNodex, false);
+    assert.strictEqual(summary.permissionGrantsAllowed, false);
+    assert.strictEqual(summary.agentHandoffRuntimeWiringAllowed, false);
+    assert.strictEqual(summary.packetHelperExecutionAllowed, false);
+    assert.strictEqual(classification.ready, true);
+    assert.strictEqual(classification.authorityGranted, false);
+    assert.deepStrictEqual(exportNames, [
+      'FIRST_EXECUTABLE_SCOPE_FORBIDDEN_SURFACES',
+      'FIRST_EXECUTABLE_SCOPE_STATUSES',
+      'FIRST_EXECUTABLE_SCOPE_TYPES',
+      'assertFirstExecutableScopeDoesNotGrantAuthority',
+      'classifyFirstExecutableScopeReadiness',
+      'createFirstExecutableScopeManifest',
+      'summarizeFirstExecutableScopeManifest',
+      'validateFirstExecutableScopeManifest',
+    ]);
+  }
+
+  testFirstExecutableScopeManifestCreatesMetadataOnlyManifest();
+  testFirstExecutableScopeManifestRejectsExecutionAuthority();
+  testFirstExecutableScopeManifestRejectsFileWrites();
+  testFirstExecutableScopeManifestRejectsProcessExecution();
+  testFirstExecutableScopeManifestRejectsGitExecution();
+  testFirstExecutableScopeManifestRejectsPermissionGrants();
+  testFirstExecutableScopeManifestRejectsAgentHandoffRuntimeWiring();
+  testFirstExecutableScopeManifestSummarizesNoAuthorityReadiness();
+}

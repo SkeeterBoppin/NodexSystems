@@ -7828,3 +7828,93 @@ console.log("PacketSystemConsolidationImplementation v1 tests passed");
   testProofClaimLayerRequiresDeterministicClaimStatus();
   testProofClaimLayerSummarizesNoAuthorityReadiness();
 }
+// ZAK_FINAL_AUTHORITY_CONTRACT_TESTS_V1
+(() => {
+  const assert = require('assert');
+  const {
+    ZAK_FINAL_AUTHORITY_CONTRACT_STATUSES,
+    ZAK_FINAL_AUTHORITY_CONTRACT_REQUIRED_APPROVALS,
+    ZAK_FINAL_AUTHORITY_CONTRACT_NON_GRANTS,
+    createZakFinalAuthorityContract,
+    validateZakFinalAuthorityContract,
+    assertZakFinalAuthorityContract,
+    summarizeZakFinalAuthorityContract,
+  } = require('../core/zakFinalAuthorityContract');
+
+  function testZakFinalAuthorityContractValidation() {
+    const contract = createZakFinalAuthorityContract();
+    const result = validateZakFinalAuthorityContract(contract);
+
+    assert.strictEqual(contract.canonicalAuthorityContract, 'ZakFinalAuthorityContract');
+    assert.strictEqual(contract.duplicateAuthoritySourcesAllowed, false);
+    assert.strictEqual(result.valid, true);
+    assert.deepStrictEqual(result.errors, []);
+    assert.strictEqual(assertZakFinalAuthorityContract(contract), contract);
+    assert.strictEqual(ZAK_FINAL_AUTHORITY_CONTRACT_STATUSES.ACTIVE, 'active');
+    assert.ok(ZAK_FINAL_AUTHORITY_CONTRACT_REQUIRED_APPROVALS.includes('authority_expansion'));
+    assert.ok(ZAK_FINAL_AUTHORITY_CONTRACT_NON_GRANTS.includes('authority_self_expansion'));
+  }
+
+  function testZakFinalAuthorityContractBlocksModelOutputApproval() {
+    const contract = createZakFinalAuthorityContract();
+    contract.approvalRules.modelOutputApprovalAccepted = true;
+
+    const result = validateZakFinalAuthorityContract(contract);
+
+    assert.strictEqual(result.valid, false);
+    assert.ok(result.errors.includes('model output cannot be accepted as operator approval'));
+  }
+
+  function testZakFinalAuthorityContractBlocksGeneratedCodeApproval() {
+    const contract = createZakFinalAuthorityContract();
+    contract.approvalRules.generatedCodeApprovalAccepted = true;
+
+    const result = validateZakFinalAuthorityContract(contract);
+
+    assert.strictEqual(result.valid, false);
+    assert.ok(result.errors.includes('generated code cannot simulate operator approval'));
+  }
+
+  function testZakFinalAuthorityContractRequiresExplicitScope() {
+    const contract = createZakFinalAuthorityContract();
+    contract.approvalRules.approvalReuseOutsideExplicitScopeAllowed = true;
+
+    const result = validateZakFinalAuthorityContract(contract);
+
+    assert.strictEqual(result.valid, false);
+    assert.ok(result.errors.includes('approval reuse outside explicit scope must remain false'));
+  }
+
+  function testZakFinalAuthorityContractSupportsRevocationAndNarrowing() {
+    const contract = createZakFinalAuthorityContract();
+    contract.approvalRules.revocationAllowed = false;
+
+    const result = validateZakFinalAuthorityContract(contract);
+
+    assert.strictEqual(result.valid, false);
+    assert.ok(result.errors.includes('operator revocation/pause/narrowing must remain allowed'));
+  }
+
+  function testZakFinalAuthorityContractBlocksAuthoritySelfUpgrade() {
+    const contract = createZakFinalAuthorityContract();
+    contract.approvalRules.authoritySelfExpansionAllowed = true;
+    contract.grants.autonomousApproval = true;
+
+    const result = validateZakFinalAuthorityContract(contract);
+
+    assert.strictEqual(result.valid, false);
+    assert.ok(result.errors.includes('authority self-expansion must remain false'));
+    assert.ok(result.errors.includes('autonomous approval must not be granted by this contract'));
+
+    const summary = summarizeZakFinalAuthorityContract(createZakFinalAuthorityContract());
+    assert.strictEqual(summary.valid, true);
+    assert.strictEqual(summary.canonicalAuthorityContract, 'ZakFinalAuthorityContract');
+  }
+
+  testZakFinalAuthorityContractValidation();
+  testZakFinalAuthorityContractBlocksModelOutputApproval();
+  testZakFinalAuthorityContractBlocksGeneratedCodeApproval();
+  testZakFinalAuthorityContractRequiresExplicitScope();
+  testZakFinalAuthorityContractSupportsRevocationAndNarrowing();
+  testZakFinalAuthorityContractBlocksAuthoritySelfUpgrade();
+})();

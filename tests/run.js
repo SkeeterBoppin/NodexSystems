@@ -3787,7 +3787,81 @@ async function run() {
   testEvolutionCandidateWorkspaceLocation();
   testBestCandidateSelection();
 
-  console.log("All Nodex tests passed");
+  // BEGIN FileOperationCapabilityHardeningImplementation v1 tests
+(() => {
+  const assert = require('assert');
+  const {
+    FILE_OPERATION_REQUIRED_HARDENING_REQUIREMENTS,
+    createFileOperationCapabilityHardeningManifest,
+    validateFileOperationCapabilityHardeningManifest,
+    assertFileOperationCapabilityHardeningManifest,
+    summarizeFileOperationCapabilityHardeningManifest
+  } = require('../core/fileOperationCapabilityHardeningManifest');
+
+  function testFileOperationCapabilityHardeningManifestValidation() {
+    const manifest = createFileOperationCapabilityHardeningManifest();
+    const result = validateFileOperationCapabilityHardeningManifest(manifest);
+    assert.strictEqual(result.valid, true);
+    assert.doesNotThrow(() => assertFileOperationCapabilityHardeningManifest(manifest));
+  }
+
+  function testFileOperationCapabilityHardeningRequiresAllRequirements() {
+    const manifest = createFileOperationCapabilityHardeningManifest({
+      acceptedHardeningRequirements: {
+        requireSha256BeforeAfter: false
+      }
+    });
+    const result = validateFileOperationCapabilityHardeningManifest(manifest);
+    assert.strictEqual(result.valid, false);
+    assert(result.errors.some((error) => error.includes('requireSha256BeforeAfter')));
+    assert(FILE_OPERATION_REQUIRED_HARDENING_REQUIREMENTS.includes('requirePostClosureSpineAudit'));
+  }
+
+  function testFileOperationCapabilityHardeningBlocksRuntimeAuthority() {
+    const manifest = createFileOperationCapabilityHardeningManifest({
+      authorityBoundary: {
+        broadFilesystemCapabilityGranted: true
+      }
+    });
+    const result = validateFileOperationCapabilityHardeningManifest(manifest);
+    assert.strictEqual(result.valid, false);
+    assert(result.errors.some((error) => error.includes('broadFilesystemCapabilityGranted')));
+  }
+
+  function testFileOperationCapabilityHardeningRequiresCandidateFileScope() {
+    const manifest = createFileOperationCapabilityHardeningManifest({
+      candidateFiles: ['tests/run.js'],
+      implementationBoundary: {
+        sourceMutationScope: 'expanded_scope'
+      }
+    });
+    const result = validateFileOperationCapabilityHardeningManifest(manifest);
+    assert.strictEqual(result.valid, false);
+    assert(result.errors.some((error) => error.includes('candidateFiles')));
+    assert(result.errors.some((error) => error.includes('candidate_files_only')));
+  }
+
+  function testFileOperationCapabilityHardeningSummaryPreservesNonGrantBoundary() {
+    const manifest = createFileOperationCapabilityHardeningManifest();
+    const summary = summarizeFileOperationCapabilityHardeningManifest(manifest);
+    assert.strictEqual(summary.valid, true);
+    assert.strictEqual(summary.noRuntimeFileOperationAuthorityGranted, true);
+    assert.strictEqual(summary.noBroadFilesystemCapabilityGranted, true);
+    assert.notStrictEqual(summary.fileMoveExecutionAllowedNow, true);
+    assert.notStrictEqual(summary.commitAllowedNow, true);
+    assert.notStrictEqual(summary.stagingAllowedNow, true);
+  }
+
+  testFileOperationCapabilityHardeningManifestValidation();
+  testFileOperationCapabilityHardeningRequiresAllRequirements();
+  testFileOperationCapabilityHardeningBlocksRuntimeAuthority();
+  testFileOperationCapabilityHardeningRequiresCandidateFileScope();
+  testFileOperationCapabilityHardeningSummaryPreservesNonGrantBoundary();
+  console.log('FileOperationCapabilityHardeningImplementation v1 tests passed');
+})();
+// END FileOperationCapabilityHardeningImplementation v1 tests
+
+console.log("All Nodex tests passed");
 }
 
 run().catch(err => {

@@ -8072,3 +8072,78 @@ console.log("PacketSystemConsolidationImplementation v1 tests passed");
   testZakFinalAuthorityContractSupportsRevocationAndNarrowing();
   testZakFinalAuthorityContractBlocksAuthoritySelfUpgrade();
 })();
+
+// FileMoveAuthorityBoundaryImplementation v1 tests
+(() => {
+  const assert = require('assert');
+  const {
+    getFileMoveAuthorityBoundaryManifest,
+    normalizeFileMovePath,
+    validateFileMoveAuthorityRequest,
+    createFileMoveAuthorityBoundaryDecision,
+    validateFileMoveAuthorityResult,
+    assertNoFileMoveExecutionAuthority
+  } = require('../core/fileMoveAuthorityBoundaryManifest');
+
+  const manifest = getFileMoveAuthorityBoundaryManifest();
+  assert.strictEqual(manifest.schema, 'nodex.file_move_authority_boundary.manifest.v1');
+  assert.strictEqual(manifest.metadataOnly, true);
+  assert.strictEqual(manifest.fileMoveExecutionAllowedNow, false);
+  assert.strictEqual(manifest.broadFilesystemCapabilityGranted, false);
+  assert.strictEqual(manifest.generatedCodeApprovalGranted, false);
+  assert.strictEqual(manifest.modelOutputApprovalGranted, false);
+  assert.strictEqual(manifest.authoritySelfExpansionGranted, false);
+  assert.ok(manifest.blockedCapabilities.includes('file_move_execution'));
+  assert.ok(manifest.blockedCapabilities.includes('broad_filesystem_capability'));
+
+  const normalized = normalizeFileMovePath('Architecture\\source.md', 'sourcePath');
+  assert.strictEqual(normalized.ok, true);
+  assert.strictEqual(normalized.normalizedPath, 'Architecture/source.md');
+
+  const traversal = normalizeFileMovePath('../outside.md', 'sourcePath');
+  assert.strictEqual(traversal.ok, false);
+  assert.ok(traversal.errors.some((error) => error.code === 'sourcePath_parent_traversal_blocked'));
+
+  const absolute = normalizeFileMovePath('C:\\Users\\Zak\\secret.txt', 'sourcePath');
+  assert.strictEqual(absolute.ok, false);
+  assert.ok(absolute.errors.some((error) => error.code === 'sourcePath_absolute_path_blocked'));
+
+  const validRequest = {
+    operation: 'move',
+    sourcePath: 'Architecture/source.md',
+    destinationPath: 'Architecture/archive/source.md',
+    reason: 'metadata boundary validation',
+    requestedBy: 'operator',
+    authorityScope: 'file_move_authority_boundary'
+  };
+
+  const validation = validateFileMoveAuthorityRequest(validRequest);
+  assert.strictEqual(validation.ok, true);
+  assert.strictEqual(validation.normalized.sourcePath, 'Architecture/source.md');
+  assert.strictEqual(validation.normalized.destinationPath, 'Architecture/archive/source.md');
+
+  const decision = createFileMoveAuthorityBoundaryDecision(validRequest);
+  assert.strictEqual(decision.requestValid, true);
+  assert.strictEqual(decision.allowed, false);
+  assert.strictEqual(decision.denied, true);
+  assert.strictEqual(decision.fileMovePerformed, false);
+  assert.strictEqual(decision.fileMoveExecutionAllowedNow, false);
+  assert.strictEqual(decision.broadFilesystemCapabilityGranted, false);
+  assert.strictEqual(decision.decision, 'file_move_request_valid_but_execution_blocked');
+
+  const resultValidation = validateFileMoveAuthorityResult(decision);
+  assert.strictEqual(resultValidation.ok, true);
+  assert.strictEqual(assertNoFileMoveExecutionAuthority(decision), true);
+
+  assert.throws(
+    () => assertNoFileMoveExecutionAuthority({
+      allowed: true,
+      fileMovePerformed: true,
+      fileMoveExecutionAllowedNow: true,
+      broadFilesystemCapabilityGranted: true
+    }),
+    /file move execution authority boundary violated/
+  );
+
+  console.log('FileMoveAuthorityBoundaryImplementation v1 tests passed');
+})();

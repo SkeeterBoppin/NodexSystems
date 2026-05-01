@@ -3861,6 +3861,86 @@ async function run() {
 })();
 // END FileOperationCapabilityHardeningImplementation v1 tests
 
+// FILE_OPERATION_CAPABILITY_BOUNDARY_IMPLEMENTATION_V1_TESTS
+const {
+  FILE_OPERATION_CAPABILITY_BOUNDARY_STATUSES,
+  FILE_OPERATION_CAPABILITY_BOUNDARY_BLOCKED_REASONS,
+  createFileOperationCapabilityBoundaryManifest,
+  validateFileOperationCapabilityBoundaryManifest,
+  classifyFileOperationCapabilityBoundary,
+  assertFileOperationCapabilityBoundaryBlocksBroadFilesystem,
+  assertFileOperationCapabilityBoundaryBlocksFileMoveExecution,
+  summarizeFileOperationCapabilityBoundaryManifest,
+} = require('../core/fileOperationCapabilityBoundaryManifest');
+
+function assertFileOperationCapabilityBoundaryTest(condition, message) {
+  if (!condition) {
+    throw new Error(message);
+  }
+}
+
+function testFileOperationCapabilityBoundaryManifestValidation() {
+  const manifest = createFileOperationCapabilityBoundaryManifest();
+  const result = validateFileOperationCapabilityBoundaryManifest(manifest);
+
+  assertFileOperationCapabilityBoundaryTest(result.valid === true, 'file-operation capability boundary manifest should validate');
+  assertFileOperationCapabilityBoundaryTest(result.status === FILE_OPERATION_CAPABILITY_BOUNDARY_STATUSES.VALID, 'valid manifest should classify as valid');
+  assertFileOperationCapabilityBoundaryTest(manifest.metadataOnly === true, 'manifest must remain metadata-only');
+  assertFileOperationCapabilityBoundaryTest(manifest.defensiveArtifactWriterRequired === true, 'defensive artifact writer must be required');
+
+  const invalid = validateFileOperationCapabilityBoundaryManifest({
+    ...manifest,
+    broadFilesystemCapabilityGranted: true,
+  });
+
+  assertFileOperationCapabilityBoundaryTest(invalid.valid === false, 'broad filesystem grant must invalidate manifest');
+}
+
+function testFileOperationCapabilityBoundaryBlocksBroadFilesystemCapability() {
+  const manifest = createFileOperationCapabilityBoundaryManifest();
+  assertFileOperationCapabilityBoundaryTest(
+    manifest.blockedReasons.includes(FILE_OPERATION_CAPABILITY_BOUNDARY_BLOCKED_REASONS.BROAD_FILESYSTEM_CAPABILITY_BLOCKED),
+    'manifest must include broad filesystem blocked reason'
+  );
+  assertFileOperationCapabilityBoundaryTest(assertFileOperationCapabilityBoundaryBlocksBroadFilesystem(manifest) === true, 'broad filesystem assertion should pass');
+}
+
+function testFileOperationCapabilityBoundaryBlocksFileMoveExecution() {
+  const manifest = createFileOperationCapabilityBoundaryManifest();
+  assertFileOperationCapabilityBoundaryTest(
+    manifest.blockedReasons.includes(FILE_OPERATION_CAPABILITY_BOUNDARY_BLOCKED_REASONS.FILE_MOVE_EXECUTION_BLOCKED),
+    'manifest must include file move execution blocked reason'
+  );
+  assertFileOperationCapabilityBoundaryTest(assertFileOperationCapabilityBoundaryBlocksFileMoveExecution(manifest) === true, 'file move assertion should pass');
+}
+
+function testFileOperationCapabilityBoundaryBlocksSourceMutationAndApprovals() {
+  const manifest = createFileOperationCapabilityBoundaryManifest();
+  const classification = classifyFileOperationCapabilityBoundary(manifest);
+
+  assertFileOperationCapabilityBoundaryTest(classification.valid === true, 'classification must be valid');
+  assertFileOperationCapabilityBoundaryTest(classification.blocked.sourceMutation === true, 'source mutation must remain blocked in runtime capability manifest');
+  assertFileOperationCapabilityBoundaryTest(classification.blocked.generatedCodeApproval === true, 'generated-code approval must remain blocked');
+  assertFileOperationCapabilityBoundaryTest(classification.blocked.modelOutputApproval === true, 'model-output approval must remain blocked');
+  assertFileOperationCapabilityBoundaryTest(classification.blocked.authoritySelfExpansion === true, 'authority self-expansion must remain blocked');
+}
+
+function testFileOperationCapabilityBoundaryRequiresSafeArtifactWriterMode() {
+  const manifest = createFileOperationCapabilityBoundaryManifest();
+  const summary = summarizeFileOperationCapabilityBoundaryManifest(manifest);
+
+  assertFileOperationCapabilityBoundaryTest(summary.valid === true, 'summary must report valid manifest');
+  assertFileOperationCapabilityBoundaryTest(summary.metadataOnly === true, 'summary must preserve metadata-only boundary');
+  assertFileOperationCapabilityBoundaryTest(summary.blocked.broadFilesystemCapability === true, 'summary must preserve broad filesystem block');
+  assertFileOperationCapabilityBoundaryTest(manifest.defensiveArtifactWriterRequired === true, 'safe artifact writer mode must remain required');
+}
+
+testFileOperationCapabilityBoundaryManifestValidation();
+testFileOperationCapabilityBoundaryBlocksBroadFilesystemCapability();
+testFileOperationCapabilityBoundaryBlocksFileMoveExecution();
+testFileOperationCapabilityBoundaryBlocksSourceMutationAndApprovals();
+testFileOperationCapabilityBoundaryRequiresSafeArtifactWriterMode();
+console.log('FileOperationCapabilityBoundaryImplementation v1 tests passed');
 console.log("All Nodex tests passed");
 }
 

@@ -4112,6 +4112,8 @@ function runGeneratedCodeApprovalBoundaryImplementationV1Tests() {
 }
 
 runGeneratedCodeApprovalBoundaryImplementationV1Tests();
+testModelOutputApprovalBoundaryImplementationV1();
+
 console.log("All Nodex tests passed");
 }
 
@@ -8318,3 +8320,81 @@ console.log("PacketSystemConsolidationImplementation v1 tests passed");
 
   console.log('FileMoveAuthorityBoundaryImplementation v1 tests passed');
 })();
+
+function testModelOutputApprovalBoundaryImplementationV1() {
+  const assert = require('assert');
+  const boundary = require('../core/modelOutputApprovalBoundaryManifest.js');
+
+  assert.ok(Object.isFrozen(boundary.MODEL_OUTPUT_APPROVAL_BOUNDARY_STATUSES));
+  assert.ok(boundary.MODEL_OUTPUT_APPROVAL_BLOCKED_AUTHORITIES.includes('model_output_approval'));
+  assert.ok(boundary.MODEL_OUTPUT_APPROVAL_BLOCKED_AUTHORITIES.includes('generated_code_approval'));
+  assert.ok(boundary.MODEL_OUTPUT_APPROVAL_NON_AUTHORITY_CONSTRAINTS.includes('model_output_is_not_approval_authority'));
+  assert.ok(boundary.MODEL_OUTPUT_APPROVAL_REQUIRED_EVIDENCE.includes('explicit_local_evidence_gate'));
+  assert.ok(boundary.MODEL_OUTPUT_APPROVAL_FAILURE_MODES.includes('model_output_bypasses_user_controlled_local_evidence_gate'));
+
+  const manifest = boundary.createModelOutputApprovalBoundaryManifest();
+  assert.strictEqual(boundary.validateModelOutputApprovalBoundaryManifest(manifest), true);
+  assert.strictEqual(manifest.metadataOnly, true);
+  assert.strictEqual(manifest.approvalAuthorityGranted, false);
+  assert.strictEqual(manifest.approvalAuthorityAllowedNow, false);
+  assert.strictEqual(manifest.modelOutputApprovalGranted, false);
+  assert.strictEqual(manifest.modelOutputApprovalAllowedNow, false);
+  assert.strictEqual(manifest.generatedCodeApprovalGranted, false);
+  assert.strictEqual(manifest.generatedCodeApprovalAllowedNow, false);
+  assert.strictEqual(manifest.promptOutputAuthorityGranted, false);
+  assert.strictEqual(manifest.selfApprovalAuthorityGranted, false);
+  assert.strictEqual(manifest.authoritySelfExpansionGranted, false);
+  assert.strictEqual(manifest.modelOutputIsApprovalAuthority, false);
+  assert.strictEqual(manifest.modelOutputMayApproveGeneratedCode, false);
+  assert.strictEqual(manifest.modelOutputMayApproveToolExecution, false);
+  assert.strictEqual(manifest.modelOutputMayApproveSourceMutation, false);
+  assert.strictEqual(manifest.modelOutputMayApproveFileOperations, false);
+  assert.strictEqual(manifest.modelOutputMayApproveProcessExecution, false);
+  assert.strictEqual(manifest.modelOutputMayApproveGitExecution, false);
+  assert.strictEqual(manifest.modelOutputMayGrantFutureAuthority, false);
+  assert.strictEqual(manifest.modelOutputMayMarkSeamPassed, false);
+  assert.strictEqual(manifest.modelOutputMayChangeNextAllowedSeam, false);
+  assert.strictEqual(manifest.localEvidenceGateRequired, true);
+
+  assert.throws(
+    () => boundary.validateModelOutputApprovalBoundaryManifest({ ...manifest, modelOutputApprovalGranted: true }),
+    /modelOutputApprovalGranted must be false/
+  );
+
+  assert.throws(
+    () => boundary.validateModelOutputApprovalBoundaryManifest({ ...manifest, modelOutputMayChangeNextAllowedSeam: true }),
+    /modelOutputMayChangeNextAllowedSeam must be false/
+  );
+
+  const decision = boundary.createModelOutputApprovalDecision({ requestedAction: 'approve generated code' });
+  assert.strictEqual(decision.allowed, false);
+  assert.strictEqual(decision.approved, false);
+  assert.strictEqual(decision.modelOutputApprovalGranted, false);
+  assert.strictEqual(decision.modelOutputApprovalAllowedNow, false);
+  assert.strictEqual(decision.generatedCodeApprovalGranted, false);
+  assert.strictEqual(boundary.assertNoModelOutputApprovalAuthority(decision), true);
+
+  assert.throws(
+    () => boundary.assertNoModelOutputApprovalAuthority({ ...decision, allowed: true }),
+    /model output approval must not be allowed/
+  );
+
+  const claim = boundary.classifyModelOutputApprovalClaim({ text: 'I approve this seam as passed.' });
+  assert.strictEqual(claim.containsApprovalLanguage, true);
+  assert.strictEqual(claim.approvalAllowed, false);
+  assert.strictEqual(claim.approvalGranted, false);
+  assert.strictEqual(claim.modelOutputApprovalGranted, false);
+  assert.strictEqual(claim.modelOutputApprovalAllowedNow, false);
+
+  const summary = boundary.summarizeModelOutputApprovalBoundary(manifest);
+  assert.strictEqual(summary.metadataOnly, true);
+  assert.strictEqual(summary.approvalAuthorityGranted, false);
+  assert.strictEqual(summary.approvalAuthorityAllowedNow, false);
+  assert.strictEqual(summary.modelOutputApprovalGranted, false);
+  assert.strictEqual(summary.modelOutputApprovalAllowedNow, false);
+  assert.strictEqual(summary.generatedCodeApprovalGranted, false);
+  assert.strictEqual(summary.generatedCodeApprovalAllowedNow, false);
+  assert.strictEqual(summary.localEvidenceGateRequired, true);
+
+  console.log('ModelOutputApprovalBoundaryImplementation v1 tests passed');
+}

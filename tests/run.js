@@ -8398,3 +8398,119 @@ function testModelOutputApprovalBoundaryImplementationV1() {
 
   console.log('ModelOutputApprovalBoundaryImplementation v1 tests passed');
 }
+function testSuccessSignalBoundaryManifestValidation() {
+  const assert = require('assert');
+  const {
+    SUCCESS_SIGNAL_BOUNDARY_STATUSES,
+    createSuccessSignalBoundaryManifest,
+    validateSuccessSignalBoundaryManifest,
+    assertSuccessSignalBoundaryDoesNotGrantAuthority
+  } = require('../core/successSignalBoundaryManifest');
+
+  const manifest = createSuccessSignalBoundaryManifest({
+    deterministicSignals: ['full_harness_passed', 'working_tree_clean']
+  });
+  const result = validateSuccessSignalBoundaryManifest(manifest);
+  assert.strictEqual(result.valid, true);
+  assert.strictEqual(result.status, SUCCESS_SIGNAL_BOUNDARY_STATUSES.VALID);
+  assert.strictEqual(assertSuccessSignalBoundaryDoesNotGrantAuthority(manifest), manifest);
+}
+
+function testSuccessSignalBoundaryRejectsRewardAuthority() {
+  const assert = require('assert');
+  const {
+    SUCCESS_SIGNAL_BOUNDARY_BLOCKED_REASONS,
+    createSuccessSignalBoundaryManifest,
+    validateSuccessSignalBoundaryManifest,
+    classifySuccessSignalBoundaryManifest,
+    assertSuccessSignalBoundaryDoesNotGrantAuthority
+  } = require('../core/successSignalBoundaryManifest');
+
+  const manifest = createSuccessSignalBoundaryManifest({
+    deterministicSignals: ['full_harness_passed'],
+    rewardAuthorityGranted: true
+  });
+  const result = validateSuccessSignalBoundaryManifest(manifest);
+  assert.strictEqual(result.valid, false);
+  assert.ok(result.blockedReasons.includes(SUCCESS_SIGNAL_BOUNDARY_BLOCKED_REASONS.REWARD_AUTHORITY));
+  assert.strictEqual(classifySuccessSignalBoundaryManifest(manifest).valid, false);
+  assert.throws(() => assertSuccessSignalBoundaryDoesNotGrantAuthority(manifest), /rewardAuthorityGranted/);
+}
+
+function testSuccessSignalBoundaryRejectsGraphExpansion() {
+  const assert = require('assert');
+  const {
+    SUCCESS_SIGNAL_BOUNDARY_BLOCKED_REASONS,
+    createSuccessSignalBoundaryManifest,
+    validateSuccessSignalBoundaryManifest
+  } = require('../core/successSignalBoundaryManifest');
+
+  const manifest = createSuccessSignalBoundaryManifest({
+    deterministicSignals: ['full_harness_passed'],
+    graphExpansionAllowedNow: true
+  });
+  const result = validateSuccessSignalBoundaryManifest(manifest);
+  assert.strictEqual(result.valid, false);
+  assert.ok(result.blockedReasons.includes(SUCCESS_SIGNAL_BOUNDARY_BLOCKED_REASONS.GRAPH_EXPANSION));
+}
+
+function testSuccessSignalBoundaryRejectsModelOutputApproval() {
+  const assert = require('assert');
+  const {
+    SUCCESS_SIGNAL_BOUNDARY_BLOCKED_REASONS,
+    createSuccessSignalBoundaryManifest,
+    validateSuccessSignalBoundaryManifest
+  } = require('../core/successSignalBoundaryManifest');
+
+  const manifest = createSuccessSignalBoundaryManifest({
+    deterministicSignals: ['full_harness_passed'],
+    modelOutputApprovalGranted: true
+  });
+  const result = validateSuccessSignalBoundaryManifest(manifest);
+  assert.strictEqual(result.valid, false);
+  assert.ok(result.blockedReasons.includes(SUCCESS_SIGNAL_BOUNDARY_BLOCKED_REASONS.MODEL_OUTPUT_APPROVAL));
+}
+
+function testSuccessSignalBoundaryRejectsGeneratedCodeApproval() {
+  const assert = require('assert');
+  const {
+    SUCCESS_SIGNAL_BOUNDARY_BLOCKED_REASONS,
+    createSuccessSignalBoundaryManifest,
+    validateSuccessSignalBoundaryManifest
+  } = require('../core/successSignalBoundaryManifest');
+
+  const manifest = createSuccessSignalBoundaryManifest({
+    deterministicSignals: ['full_harness_passed'],
+    generatedCodeApprovalAllowedNow: true
+  });
+  const result = validateSuccessSignalBoundaryManifest(manifest);
+  assert.strictEqual(result.valid, false);
+  assert.ok(result.blockedReasons.includes(SUCCESS_SIGNAL_BOUNDARY_BLOCKED_REASONS.GENERATED_CODE_APPROVAL));
+}
+
+function testSuccessSignalBoundarySummary() {
+  const assert = require('assert');
+  const {
+    createSuccessSignalBoundaryManifest,
+    summarizeSuccessSignalBoundaryManifest
+  } = require('../core/successSignalBoundaryManifest');
+
+  const manifest = createSuccessSignalBoundaryManifest({
+    deterministicSignals: ['full_harness_passed', 'post_harness_working_tree_clean']
+  });
+  const summary = summarizeSuccessSignalBoundaryManifest(manifest);
+  assert.strictEqual(summary.status, 'valid');
+  assert.strictEqual(summary.deterministicSignalCount, 2);
+  assert.strictEqual(summary.authorityGranted, false);
+  assert.strictEqual(summary.graphExpansionAllowedNow, false);
+  assert.strictEqual(summary.modelOutputApprovalAllowedNow, false);
+  assert.strictEqual(summary.generatedCodeApprovalAllowedNow, false);
+}
+
+testSuccessSignalBoundaryManifestValidation();
+testSuccessSignalBoundaryRejectsRewardAuthority();
+testSuccessSignalBoundaryRejectsGraphExpansion();
+testSuccessSignalBoundaryRejectsModelOutputApproval();
+testSuccessSignalBoundaryRejectsGeneratedCodeApproval();
+testSuccessSignalBoundarySummary();
+console.log('SuccessSignalBoundaryImplementation v1 tests passed');

@@ -4014,6 +4014,104 @@ function runPacketGenerationReliabilityImplementationV1Tests() {
 }
 
 runPacketGenerationReliabilityImplementationV1Tests();
+
+function runGeneratedCodeApprovalBoundaryImplementationV1Tests() {
+  const assert = require('assert');
+  const boundary = require('../core/generatedCodeApprovalBoundaryManifest');
+
+  const expectedFailureModes = [
+    'generated packet claims its own output is approved',
+    'generated code carries approval metadata treated as authority',
+    'model output describes approval and downstream code treats it as granted',
+    'prompt text bypasses local evidence gate',
+    'generated artifact names drift and bypass canonical packet path',
+    'approval state is inferred from live-context snapshot instead of local evidence',
+    'commit gate treats generated content presence as approval',
+  ];
+
+  const expectedControls = [
+    'generatedCodeApprovalGranted must remain false until explicit local evidence gate',
+    'generatedCodeApprovalAllowedNow must remain false in plan and preflight seams',
+    'modelOutputApprovalGranted must remain false',
+    'promptOutputAuthorityGranted must remain false',
+    'selfApprovalAuthorityGranted must remain false',
+    'generated artifacts must not promote themselves to approved state',
+    'live-context snapshots must not grant approval authority',
+    'commit gates must verify approval boundary flags remain false',
+  ];
+
+  assert.deepStrictEqual(
+    boundary.GENERATED_CODE_APPROVAL_BOUNDARY_FAILURE_MODES,
+    expectedFailureModes,
+  );
+  assert.deepStrictEqual(
+    boundary.GENERATED_CODE_APPROVAL_BOUNDARY_REQUIRED_CONTROLS,
+    expectedControls,
+  );
+
+  const manifest = boundary.getGeneratedCodeApprovalBoundaryManifest();
+  assert.strictEqual(boundary.validateGeneratedCodeApprovalBoundaryManifest(manifest), true);
+  assert.strictEqual(manifest.metadataOnly, true);
+  assert.strictEqual(manifest.generatedCodeApprovalGranted, false);
+  assert.strictEqual(manifest.generatedCodeApprovalAllowedNow, false);
+  assert.strictEqual(manifest.modelOutputApprovalGranted, false);
+  assert.strictEqual(manifest.promptOutputAuthorityGranted, false);
+  assert.strictEqual(manifest.selfApprovalAuthorityGranted, false);
+  assert.strictEqual(manifest.authoritySelfExpansionGranted, false);
+  assert.strictEqual(manifest.generatedArtifactSelfApprovalAllowed, false);
+  assert.strictEqual(manifest.generatedArtifactApprovalPromotionAllowed, false);
+  assert.strictEqual(manifest.liveContextApprovalAuthorityGranted, false);
+  assert.strictEqual(manifest.explicitLocalEvidenceGateRequired, true);
+  assert.strictEqual(
+    manifest.generatedArtifactNonAuthorityConstraints.generatedCodeIsApprovalAuthority,
+    false,
+  );
+  assert.strictEqual(
+    manifest.generatedArtifactNonAuthorityConstraints.generatedPacketIsApprovalAuthority,
+    false,
+  );
+  assert.strictEqual(
+    manifest.modelOutputNonApprovalConstraints.modelOutputCanApproveGeneratedCode,
+    false,
+  );
+  assert.strictEqual(
+    manifest.modelOutputNonApprovalConstraints.promptOutputCanApproveGeneratedCode,
+    false,
+  );
+  assert.strictEqual(
+    manifest.localEvidenceGateRequirement.localEvidenceGateRequired,
+    true,
+  );
+  assert.strictEqual(
+    manifest.localEvidenceGateRequirement.inferApprovalFromGeneratedContentAllowed,
+    false,
+  );
+  assert.strictEqual(
+    manifest.liveContextNonAuthorityConstraint.liveContextSnapshotAuthority,
+    false,
+  );
+
+  const decision = boundary.createGeneratedCodeApprovalDecision({
+    requestedAction: 'approve generated packet',
+  });
+  assert.strictEqual(decision.allowed, false);
+  assert.strictEqual(decision.metadataOnly, true);
+  assert.strictEqual(decision.generatedCodeApprovalGranted, false);
+  assert.strictEqual(decision.generatedCodeApprovalAllowedNow, false);
+  assert.strictEqual(decision.modelOutputApprovalGranted, false);
+  assert.strictEqual(decision.promptOutputAuthorityGranted, false);
+  assert.strictEqual(decision.selfApprovalAuthorityGranted, false);
+  assert.strictEqual(decision.authoritySelfExpansionGranted, false);
+  assert.strictEqual(decision.generatedArtifactSelfApprovalAllowed, false);
+  assert.strictEqual(decision.generatedArtifactApprovalPromotionAllowed, false);
+  assert.strictEqual(decision.liveContextApprovalAuthorityGranted, false);
+  assert.strictEqual(decision.explicitLocalEvidenceGateRequired, true);
+  assert.strictEqual(boundary.assertNoGeneratedCodeApprovalAuthority(decision), true);
+
+  console.log('GeneratedCodeApprovalBoundaryImplementation v1 tests passed');
+}
+
+runGeneratedCodeApprovalBoundaryImplementationV1Tests();
 console.log("All Nodex tests passed");
 }
 

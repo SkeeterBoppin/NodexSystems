@@ -3941,6 +3941,79 @@ testFileOperationCapabilityBoundaryBlocksFileMoveExecution();
 testFileOperationCapabilityBoundaryBlocksSourceMutationAndApprovals();
 testFileOperationCapabilityBoundaryRequiresSafeArtifactWriterMode();
 console.log('FileOperationCapabilityBoundaryImplementation v1 tests passed');
+
+function runPacketGenerationReliabilityImplementationV1Tests() {
+  const assert = require('assert');
+  const reliability = require('../core/packetGenerationReliabilityManifest');
+
+  const expectedFailureClasses = [
+    'PowerShell parser errors',
+    'PowerShell type mismatch while writing failure artifacts',
+    'wrong Git argument array construction',
+    'git warning text parsed as filenames',
+    'stale downloaded packet reruns',
+    'filename drift from reupload packets',
+    'continuity snapshot lag behind local evidence',
+    'prompt-output authority leakage',
+  ];
+
+  const expectedControls = [
+    'packet string construction must prefer arrays and ConvertTo-Json over manual escaped JSON',
+    'file artifact names must remain canonical and overwrite stale local artifacts instead of REUPLOAD suffixes',
+    'Git status comparisons must normalize porcelain status lines and ignore command warnings',
+    'failure artifact writers must accept scalar failure text only and avoid mismatched typed collections',
+    'generated packets must include explicit prior evidence verification before write or mutation',
+    'packets that mutate must compare exact dirty/staged sets before and after mutation',
+    'live-context continuity must remain separate from local evidence authority',
+  ];
+
+  assert.deepStrictEqual(
+    reliability.PACKET_GENERATION_RELIABILITY_FAILURE_CLASSES,
+    expectedFailureClasses,
+  );
+  assert.deepStrictEqual(
+    reliability.PACKET_GENERATION_RELIABILITY_CONTROLS,
+    expectedControls,
+  );
+
+  const manifest = reliability.getPacketGenerationReliabilityManifest();
+  assert.strictEqual(reliability.validatePacketGenerationReliabilityManifest(manifest), true);
+  assert.strictEqual(manifest.metadataOnly, true);
+  assert.strictEqual(manifest.fileMoveExecutionAllowedNow, false);
+  assert.strictEqual(manifest.broadFilesystemCapabilityGranted, false);
+  assert.strictEqual(manifest.generatedCodeApprovalGranted, false);
+  assert.strictEqual(manifest.modelOutputApprovalGranted, false);
+  assert.strictEqual(manifest.authoritySelfExpansionGranted, false);
+  assert.strictEqual(manifest.packetGenerationApprovalAuthorityGranted, false);
+  assert.strictEqual(manifest.sourceMutationAuthorityGranted, false);
+  assert.strictEqual(manifest.canonicalArtifactPolicy.reuploadSuffixAllowed, false);
+  assert.strictEqual(manifest.powershellPolicy.manualEscapedJsonAllowed, false);
+  assert.strictEqual(manifest.gitPolicy.warningTextPathParsingAllowed, false);
+  assert.strictEqual(manifest.continuityPolicy.localEvidenceAuthority, true);
+  assert.strictEqual(manifest.continuityPolicy.liveContextSnapshotAuthority, false);
+
+  const decision = reliability.createPacketGenerationReliabilityDecision({
+    requestedAction: 'approve generated packet',
+  });
+  assert.strictEqual(decision.allowed, false);
+  assert.strictEqual(decision.metadataOnly, true);
+  assert.strictEqual(decision.sourceMutationAllowedNow, false);
+  assert.strictEqual(decision.commitAllowedNow, false);
+  assert.strictEqual(decision.stagingAllowedNow, false);
+  assert.strictEqual(decision.liveContextCommitAllowedNow, false);
+  assert.strictEqual(decision.liveContextStagingAllowedNow, false);
+  assert.strictEqual(decision.fileMoveExecutionAllowedNow, false);
+  assert.strictEqual(decision.broadFilesystemCapabilityGranted, false);
+  assert.strictEqual(decision.generatedCodeApprovalGranted, false);
+  assert.strictEqual(decision.modelOutputApprovalGranted, false);
+  assert.strictEqual(decision.authoritySelfExpansionGranted, false);
+  assert.strictEqual(decision.packetGenerationApprovalAuthorityGranted, false);
+  assert.strictEqual(reliability.assertNoPacketGenerationAuthority(decision), true);
+
+  console.log('PacketGenerationReliabilityImplementation v1 tests passed');
+}
+
+runPacketGenerationReliabilityImplementationV1Tests();
 console.log("All Nodex tests passed");
 }
 

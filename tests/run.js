@@ -8693,3 +8693,106 @@ testSuccessSignalBoundaryRejectsModelOutputApproval();
 testSuccessSignalBoundaryRejectsGeneratedCodeApproval();
 testSuccessSignalBoundarySummary();
 console.log('SuccessSignalBoundaryImplementation v1 tests passed');
+
+// PACKET_GENERATION_ASSISTANT_BOUNDARY_TESTS_START
+;(() => {
+  const assert = require('assert');
+  const boundary = require('../core/packetGenerationAssistantBoundaryManifest');
+
+  function runPacketGenerationAssistantBoundaryTests() {
+    const manifest = boundary.getPacketGenerationAssistantBoundaryManifest();
+
+    assert.strictEqual(
+      manifest.version,
+      boundary.PACKET_GENERATION_ASSISTANT_BOUNDARY_MANIFEST_VERSION,
+      'packet generation assistant boundary manifest exposes metadata-only defaults'
+    );
+    assert.strictEqual(manifest.type, 'metadata_only_manifest_validator');
+    assert.strictEqual(manifest.localEvidenceAuthorityRequired, true);
+    assert.strictEqual(manifest.schemaBoundPacketDraftsRequired, true);
+    assert.strictEqual(manifest.packetGenerationAuthorityGranted, false);
+    assert.strictEqual(manifest.packetExecutionAuthorityGranted, false);
+    assert.strictEqual(manifest.packetCommitAuthorityGranted, false);
+    assert.strictEqual(manifest.packetPushAuthorityGranted, false);
+    assert.strictEqual(manifest.runtimeExecutionAllowed, false);
+    assert.strictEqual(manifest.toolExecutionAllowed, false);
+    assert.strictEqual(manifest.modelOutputApprovalAllowed, false);
+    assert.strictEqual(manifest.generatedCodeApprovalAllowed, false);
+    assert.strictEqual(manifest.authorityExpansionAllowed, false);
+
+    const validation = boundary.validatePacketGenerationAssistantBoundaryManifest(manifest);
+    assert.strictEqual(validation.valid, true, validation.errors.join('; '));
+
+    assert.strictEqual(
+      boundary.isPacketGenerationAssistantBoundaryAuthorityGranted(manifest),
+      false,
+      'packet generation assistant boundary rejects authority grants'
+    );
+
+    const authorityGrant = boundary.validatePacketGenerationAssistantBoundaryManifest({
+      ...manifest,
+      packetExecutionAuthorityGranted: true,
+    });
+    assert.strictEqual(authorityGrant.valid, false);
+    assert(
+      authorityGrant.errors.includes('packetExecutionAuthorityGranted must be false'),
+      'packet generation assistant boundary rejects authority grants'
+    );
+
+    const missingEvidenceAuthority =
+      boundary.validatePacketGenerationAssistantBoundaryManifest({
+        ...manifest,
+        localEvidenceAuthorityRequired: false,
+      });
+    assert.strictEqual(missingEvidenceAuthority.valid, false);
+    assert(
+      missingEvidenceAuthority.errors.includes('localEvidenceAuthorityRequired must be true'),
+      'packet generation assistant boundary requires external evidence authority'
+    );
+
+    const trackedSelfReference =
+      boundary.validatePacketGenerationAssistantBoundaryManifest({
+        ...manifest,
+        trackedLiveContextCommitSelfReferenceBlocked: false,
+      });
+    assert.strictEqual(trackedSelfReference.valid, false);
+    assert(
+      trackedSelfReference.errors.includes(
+        'trackedLiveContextCommitSelfReferenceBlocked must be true'
+      ),
+      'packet generation assistant boundary rejects tracked live-context commit self-reference'
+    );
+
+    const hereStringHazard =
+      boundary.validatePacketGenerationAssistantBoundaryManifest({
+        ...manifest,
+        nestedHereStringCollisionHazardBlocked: false,
+      });
+    assert.strictEqual(hereStringHazard.valid, false);
+    assert(
+      hereStringHazard.errors.includes('nestedHereStringCollisionHazardBlocked must be true'),
+      'packet generation assistant boundary rejects nested here-string collision hazard'
+    );
+
+    const state = boundary.createPacketGenerationAssistantBoundaryState();
+    const stateValidation = boundary.validatePacketGenerationAssistantBoundaryState(state);
+    assert.strictEqual(stateValidation.valid, true, stateValidation.errors.join('; '));
+    assert.strictEqual(state.packetExecutedByNodex, false);
+    assert.strictEqual(state.packetCommittedByNodex, false);
+    assert.strictEqual(state.packetPushedByNodex, false);
+    assert.strictEqual(state.authorityGranted, false);
+
+    const badState = boundary.validatePacketGenerationAssistantBoundaryState({
+      ...state,
+      packetExecutedByNodex: true,
+    });
+    assert.strictEqual(badState.valid, false);
+    assert(
+      badState.errors.includes('packetExecutedByNodex must be false'),
+      'packet generation assistant boundary rejects packet execution authority'
+    );
+  }
+
+  runPacketGenerationAssistantBoundaryTests();
+})();
+// PACKET_GENERATION_ASSISTANT_BOUNDARY_TESTS_END

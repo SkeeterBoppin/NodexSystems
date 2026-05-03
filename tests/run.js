@@ -4010,9 +4010,188 @@ function runPacketGenerationReliabilityImplementationV1Tests() {
   assert.strictEqual(decision.packetGenerationApprovalAuthorityGranted, false);
   assert.strictEqual(reliability.assertNoPacketGenerationAuthority(decision), true);
 
-  console.log('PacketGenerationReliabilityImplementation v1 tests passed');
+  testPacketExecutionContextManifestValidation();
+  testPacketExecutionContextRejectsBareGitDashC();
+  testPacketExecutionContextRequiresRenderedCommandAndActualArgv();
+  testPacketExecutionContextNormalizesGitStatus();
+  testFailureFingerprintManifestValidation();
+  testFailureFingerprintBlocksKnownGeneratedPacketFailures();
+  testFailureFingerprintRejectsProbabilisticLearning();
+  testPacketGenerationReliabilityHardeningHarnessMarker();
+  console.log("PacketGenerationReliabilityHardeningImplementation v1 tests passed");  console.log('PacketGenerationReliabilityImplementation v1 tests passed');
 }
 
+
+function testPacketExecutionContextManifestValidation() {
+  const {
+    PACKET_EXECUTION_CONTEXT_REQUIRED_FIELDS,
+    createPacketExecutionContextManifest,
+    validatePacketExecutionContextManifest,
+    classifyPacketExecutionContextManifest,
+    summarizePacketExecutionContextManifest
+  } = require("../core/packetExecutionContextManifest");
+
+  assert(PACKET_EXECUTION_CONTEXT_REQUIRED_FIELDS.includes("actualArgvText"));
+
+  const manifest = createPacketExecutionContextManifest({
+    packetFilename: "packet.ps1",
+    packetSchema: "nodex.packet",
+    seam: "PacketGenerationReliabilityHardeningImplementation v1",
+    renderedCommand: "git -C repo status --porcelain=v1",
+    actualArgvText: "git | -C | repo | status | --porcelain=v1",
+    commandInvocationForm: "explicit_argument_array_process_invocation",
+    repoRoot: "repo",
+    liveContextRoot: "live",
+    gitStatusRaw: "",
+    stagedPathsRaw: ""
+  });
+
+  const validation = validatePacketExecutionContextManifest(manifest);
+  assert.strictEqual(validation.valid, true);
+  assert.strictEqual(classifyPacketExecutionContextManifest(manifest).status, "valid");
+  assert.strictEqual(summarizePacketExecutionContextManifest(manifest).gitStatusEntryCount, 0);
+}
+
+function testPacketExecutionContextRejectsBareGitDashC() {
+  const {
+    PACKET_EXECUTION_CONTEXT_BLOCKED_FAILURE_CLASSES,
+    createPacketExecutionContextManifest,
+    validatePacketExecutionContextManifest
+  } = require("../core/packetExecutionContextManifest");
+
+  const manifest = createPacketExecutionContextManifest({
+    packetFilename: "bad.ps1",
+    packetSchema: "nodex.packet",
+    seam: "PacketGenerationReliabilityHardeningImplementation v1",
+    renderedCommand: "git -C repo",
+    actualArgvText: "git | -C | repo",
+    commandInvocationForm: "explicit_argument_array_process_invocation",
+    repoRoot: "repo",
+    liveContextRoot: "live",
+    gitStatusRaw: "",
+    stagedPathsRaw: ""
+  });
+
+  const validation = validatePacketExecutionContextManifest(manifest);
+  assert.strictEqual(validation.valid, false);
+  assert(validation.blockedReasons.includes(PACKET_EXECUTION_CONTEXT_BLOCKED_FAILURE_CLASSES.BARE_GIT_DASH_C_WITHOUT_SUBCOMMAND_ARGS));
+}
+
+function testPacketExecutionContextRequiresRenderedCommandAndActualArgv() {
+  const { createPacketExecutionContextManifest, validatePacketExecutionContextManifest } = require("../core/packetExecutionContextManifest");
+
+  const manifest = createPacketExecutionContextManifest({
+    packetFilename: "bad.ps1",
+    packetSchema: "nodex.packet",
+    seam: "PacketGenerationReliabilityHardeningImplementation v1",
+    renderedCommand: "",
+    actualArgvText: "",
+    commandInvocationForm: "explicit_argument_array_process_invocation",
+    repoRoot: "repo",
+    liveContextRoot: "live",
+    gitStatusRaw: "",
+    stagedPathsRaw: ""
+  });
+
+  const validation = validatePacketExecutionContextManifest(manifest);
+  assert.strictEqual(validation.valid, false);
+  assert(validation.errors.some((error) => error.includes("renderedCommand")));
+  assert(validation.errors.some((error) => error.includes("actualArgvText")));
+}
+
+function testPacketExecutionContextNormalizesGitStatus() {
+  const { createPacketExecutionContextManifest, summarizePacketExecutionContextManifest } = require("../core/packetExecutionContextManifest");
+
+  const manifest = createPacketExecutionContextManifest({
+    packetFilename: "packet.ps1",
+    packetSchema: "nodex.packet",
+    seam: "PacketGenerationReliabilityHardeningImplementation v1",
+    renderedCommand: "git -C repo status --porcelain=v1",
+    actualArgvText: "git | -C | repo | status | --porcelain=v1",
+    commandInvocationForm: "explicit_argument_array_process_invocation",
+    repoRoot: "repo",
+    liveContextRoot: "live",
+    gitStatusRaw: " M tests/run.js\n?? core/file.js",
+    stagedPathsRaw: ""
+  });
+
+  assert.deepStrictEqual(manifest.gitStatusNormalized.map((entry) => entry.path), ["tests/run.js", "core/file.js"]);
+  assert.strictEqual(summarizePacketExecutionContextManifest(manifest).gitStatusEntryCount, 2);
+}
+
+function testFailureFingerprintManifestValidation() {
+  const {
+    FAILURE_FINGERPRINT_CLASSES,
+    createFailureFingerprintManifest,
+    validateFailureFingerprintManifest,
+    classifyFailureFingerprintManifest,
+    summarizeFailureFingerprintManifest
+  } = require("../core/failureFingerprintManifest");
+
+  const manifest = createFailureFingerprintManifest({
+    failureClass: FAILURE_FINGERPRINT_CLASSES.EMPTY_GIT_STATUS_REJECTED,
+    sourceSeam: "PacketGenerationReliabilityHardeningImplementationPlan v1",
+    observedFailure: "NodexStatus cannot bind empty string",
+    deterministicDenyRule: "Allow empty clean git status outputs and deny validators that reject them.",
+    blocksRepeatedPacketFailure: true,
+    probabilisticLearningAllowed: false
+  });
+
+  const validation = validateFailureFingerprintManifest(manifest);
+  assert.strictEqual(validation.valid, true);
+  assert.strictEqual(classifyFailureFingerprintManifest(manifest).status, "blocked");
+  assert.strictEqual(summarizeFailureFingerprintManifest(manifest).blocksRepeatedPacketFailure, true);
+}
+
+function testFailureFingerprintBlocksKnownGeneratedPacketFailures() {
+  const {
+    FAILURE_FINGERPRINT_CLASSES,
+    createFailureFingerprintManifest,
+    assertFailureFingerprintBlocksRepeatedPacketFailure
+  } = require("../core/failureFingerprintManifest");
+
+  const knownClasses = Object.values(FAILURE_FINGERPRINT_CLASSES);
+  for (const failureClass of knownClasses) {
+    const manifest = createFailureFingerprintManifest({
+      failureClass,
+      sourceSeam: "PacketGenerationReliabilityHardeningImplementation v1",
+      observedFailure: failureClass,
+      deterministicDenyRule: "Deny repeated generated packet failure class: " + failureClass,
+      blocksRepeatedPacketFailure: true,
+      probabilisticLearningAllowed: false
+    });
+    assert.strictEqual(assertFailureFingerprintBlocksRepeatedPacketFailure(manifest), manifest);
+  }
+}
+
+function testFailureFingerprintRejectsProbabilisticLearning() {
+  const {
+    FAILURE_FINGERPRINT_CLASSES,
+    createFailureFingerprintManifest,
+    validateFailureFingerprintManifest
+  } = require("../core/failureFingerprintManifest");
+
+  const manifest = createFailureFingerprintManifest({
+    failureClass: FAILURE_FINGERPRINT_CLASSES.ARGUMENT_TYPES_DO_NOT_MATCH,
+    sourceSeam: "PacketGenerationReliabilityHardeningImplementation v1",
+    observedFailure: "Argument types do not match",
+    deterministicDenyRule: "Deny the exact failure class through a static fingerprint.",
+    blocksRepeatedPacketFailure: true,
+    probabilisticLearningAllowed: true
+  });
+
+  const validation = validateFailureFingerprintManifest(manifest);
+  assert.strictEqual(validation.valid, false);
+  assert(validation.errors.includes("probabilisticLearningAllowed must remain false"));
+}
+
+function testPacketGenerationReliabilityHardeningHarnessMarker() {
+  const packetExecutionContext = require("../core/packetExecutionContextManifest");
+  const failureFingerprint = require("../core/failureFingerprintManifest");
+
+  assert.strictEqual(typeof packetExecutionContext.createPacketExecutionContextManifest, "function");
+  assert.strictEqual(typeof failureFingerprint.assertFailureFingerprintBlocksRepeatedPacketFailure, "function");
+}
 runPacketGenerationReliabilityImplementationV1Tests();
 
 function runGeneratedCodeApprovalBoundaryImplementationV1Tests() {

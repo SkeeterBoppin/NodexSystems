@@ -8796,3 +8796,201 @@ console.log('SuccessSignalBoundaryImplementation v1 tests passed');
   runPacketGenerationAssistantBoundaryTests();
 })();
 // PACKET_GENERATION_ASSISTANT_BOUNDARY_TESTS_END
+
+const staticPacketSchemaValidationLayer = require("../core/staticPacketSchemaValidationLayerManifest");
+
+function testStaticPacketSchemaValidationLayerManifestValidation() {
+  const manifest =
+    staticPacketSchemaValidationLayer.getStaticPacketSchemaValidationLayerManifest();
+  const validation =
+    staticPacketSchemaValidationLayer.validateStaticPacketSchemaValidationLayerManifest(manifest);
+
+  assert.strictEqual(validation.valid, true);
+  assert.deepStrictEqual(validation.errors, []);
+  assert.strictEqual(
+    manifest.version,
+    staticPacketSchemaValidationLayer.STATIC_PACKET_SCHEMA_VALIDATION_LAYER_MANIFEST_VERSION
+  );
+  assert.strictEqual(manifest.type, "metadata_only_static_packet_schema_validation_layer");
+  assert.strictEqual(manifest.localEvidenceAuthorityRequired, true);
+  assert.strictEqual(manifest.preOperatorPacketLintGateRequired, true);
+  assert.strictEqual(manifest.manifestStateBoundaryContractRequired, true);
+  assert.strictEqual(Array.isArray(manifest.knownProbeMismatchClasses), true);
+  assert.strictEqual(Array.isArray(manifest.validationControls), true);
+
+  assert.throws(
+    () =>
+      staticPacketSchemaValidationLayer.assertStaticPacketSchemaValidationLayerManifest({
+        ...manifest,
+        authorityGranted: false,
+      }),
+    /authorityGranted must not be present/
+  );
+
+  assert.throws(
+    () =>
+      staticPacketSchemaValidationLayer.assertStaticPacketSchemaValidationLayerManifest({
+        ...manifest,
+        knownProbeMismatchClasses: [
+          ...manifest.knownProbeMismatchClasses,
+          "readiness_probe_state_manifest_boundary_mismatch",
+        ],
+      }),
+    /duplicate entry/
+  );
+}
+
+function testStaticPacketSchemaValidationLayerStateValidation() {
+  const state =
+    staticPacketSchemaValidationLayer.createStaticPacketSchemaValidationLayerState();
+  const validation =
+    staticPacketSchemaValidationLayer.validateStaticPacketSchemaValidationLayerState(state);
+
+  assert.strictEqual(validation.valid, true);
+  assert.deepStrictEqual(validation.errors, []);
+  assert.strictEqual(state.schemaValidated, true);
+  assert.strictEqual(state.packetLintGateSatisfied, true);
+  assert.strictEqual(state.localEvidenceAuthorityVerified, true);
+  assert.strictEqual(state.knownProbeMismatchClassesCovered, true);
+  assert.strictEqual(state.sourceMutationAllowed, false);
+  assert.strictEqual(state.implementationAllowed, false);
+  assert.strictEqual(state.runtimeExecutionAllowed, false);
+  assert.strictEqual(state.toolExecutionAllowed, false);
+  assert.strictEqual(state.packetExecutedByNodex, false);
+  assert.strictEqual(state.packetCommittedByNodex, false);
+  assert.strictEqual(state.packetPushedByNodex, false);
+
+  assert.throws(
+    () =>
+      staticPacketSchemaValidationLayer.assertStaticPacketSchemaValidationLayerState({
+        ...state,
+        packetExecutedByNodex: true,
+      }),
+    /packetExecutedByNodex must be false/
+  );
+}
+
+function testStaticPacketSchemaValidationLayerBlocksAuthority() {
+  const manifest =
+    staticPacketSchemaValidationLayer.getStaticPacketSchemaValidationLayerManifest();
+  const state =
+    staticPacketSchemaValidationLayer.createStaticPacketSchemaValidationLayerState();
+  const classification =
+    staticPacketSchemaValidationLayer.classifyStaticPacketSchemaValidationLayerReadiness({
+      manifest,
+      state,
+    });
+  const summary =
+    staticPacketSchemaValidationLayer.summarizeStaticPacketSchemaValidationLayer({
+      manifest,
+      state,
+    });
+
+  assert.strictEqual(classification.status, "metadata_only_static_packet_schema_validation_ready");
+  assert.strictEqual(classification.allowed, true);
+  assert.strictEqual(classification.authorityGranted, false);
+  assert.strictEqual(summary.authorityGranted, false);
+  assert.strictEqual(summary.sourceMutationAllowed, false);
+  assert.strictEqual(summary.implementationAllowed, false);
+  assert.strictEqual(summary.runtimeExecutionAllowed, false);
+  assert.strictEqual(summary.toolExecutionAllowed, false);
+  assert.strictEqual(summary.packetExecutedByNodex, false);
+  assert.strictEqual(summary.packetCommittedByNodex, false);
+  assert.strictEqual(summary.packetPushedByNodex, false);
+
+  const blocked =
+    staticPacketSchemaValidationLayer.classifyStaticPacketSchemaValidationLayerReadiness({
+      manifest: {
+        ...manifest,
+        runtimeExecutionAllowed: true,
+      },
+      state,
+    });
+
+  assert.strictEqual(blocked.status, "blocked_invalid_static_packet_schema_validation_layer");
+  assert.strictEqual(blocked.allowed, false);
+}
+
+function testStaticPacketSchemaValidationLayerRequiresPacketLintGate() {
+  const manifest =
+    staticPacketSchemaValidationLayer.getStaticPacketSchemaValidationLayerManifest();
+
+  assert.strictEqual(manifest.validationControls.includes("pre_operator_packet_lint_gate"), true);
+  assert.strictEqual(manifest.validationControls.includes("manifest_state_boundary_contract"), true);
+  assert.strictEqual(manifest.validationControls.includes("forbidden_generic_authority_field_check"), true);
+  assert.strictEqual(manifest.validationControls.includes("state_schema_overassertion_check"), true);
+  assert.strictEqual(manifest.validationControls.includes("exact_dirty_scope_check"), true);
+
+  const invalidManifest = {
+    ...manifest,
+    validationControls: manifest.validationControls.filter(
+      (control) => control !== "pre_operator_packet_lint_gate"
+    ),
+  };
+  const validation =
+    staticPacketSchemaValidationLayer.validateStaticPacketSchemaValidationLayerManifest(
+      invalidManifest
+    );
+
+  assert.strictEqual(validation.valid, false);
+  assert(validation.errors.includes("validationControls missing pre_operator_packet_lint_gate"));
+}
+
+function testStaticPacketSchemaValidationLayerDetectsKnownProbeMismatchClasses() {
+  const manifest =
+    staticPacketSchemaValidationLayer.getStaticPacketSchemaValidationLayerManifest();
+
+  [
+    "readiness_probe_state_manifest_boundary_mismatch",
+    "readiness_probe_generic_authority_field_mismatch",
+    "readiness_probe_state_schema_overassertion",
+  ].forEach((observedMismatchClass) => {
+    assert.strictEqual(
+      manifest.knownProbeMismatchClasses.includes(observedMismatchClass),
+      true
+    );
+
+    const classification =
+      staticPacketSchemaValidationLayer.classifyStaticPacketSchemaValidationLayerReadiness({
+        observedMismatchClass,
+      });
+
+    assert.strictEqual(classification.status, "known_probe_mismatch_detected");
+    assert.strictEqual(classification.allowed, false);
+    assert.strictEqual(classification.authorityGranted, false);
+    assert.strictEqual(classification.mismatchClass, observedMismatchClass);
+    assert.strictEqual(classification.requiredLocalEvidence, true);
+  });
+
+  const unknown =
+    staticPacketSchemaValidationLayer.classifyStaticPacketSchemaValidationLayerReadiness({
+      observedMismatchClass: "unexpected_packet_probe_failure",
+    });
+
+  assert.strictEqual(unknown.status, "unknown_probe_mismatch_detected");
+  assert.strictEqual(unknown.allowed, false);
+  assert.strictEqual(unknown.authorityGranted, false);
+}
+
+(function runStaticPacketSchemaValidationLayerImplementationTests() {
+  const exportKeys = Object.keys(staticPacketSchemaValidationLayer).sort();
+  assert.deepStrictEqual(exportKeys, [
+    "STATIC_PACKET_SCHEMA_VALIDATION_LAYER_MANIFEST_VERSION",
+    "assertStaticPacketSchemaValidationLayerManifest",
+    "assertStaticPacketSchemaValidationLayerState",
+    "classifyStaticPacketSchemaValidationLayerReadiness",
+    "createStaticPacketSchemaValidationLayerState",
+    "getStaticPacketSchemaValidationLayerManifest",
+    "summarizeStaticPacketSchemaValidationLayer",
+    "validateStaticPacketSchemaValidationLayerManifest",
+    "validateStaticPacketSchemaValidationLayerState",
+  ].sort());
+
+  testStaticPacketSchemaValidationLayerManifestValidation();
+  testStaticPacketSchemaValidationLayerStateValidation();
+  testStaticPacketSchemaValidationLayerBlocksAuthority();
+  testStaticPacketSchemaValidationLayerRequiresPacketLintGate();
+  testStaticPacketSchemaValidationLayerDetectsKnownProbeMismatchClasses();
+
+  console.log("StaticPacketSchemaValidationLayerImplementation v1 tests passed");
+})();

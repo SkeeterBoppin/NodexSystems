@@ -8994,3 +8994,117 @@ function testStaticPacketSchemaValidationLayerDetectsKnownProbeMismatchClasses()
 
   console.log("StaticPacketSchemaValidationLayerImplementation v1 tests passed");
 })();
+
+// BEGIN AnomalyPromotionBoundaryImplementation v1 tests
+(() => {
+  const anomalyPromotionBoundary = require('../core/anomalyPromotionBoundaryManifest');
+
+  function assertAnomalyPromotionBoundary(condition, message) {
+    if (!condition) {
+      throw new Error(message);
+    }
+  }
+
+  function makeValidAnomalyPromotionRecord(overrides = {}) {
+    return anomalyPromotionBoundary.createAnomalyPromotionRecord({
+      anomalyId: 'anom_001',
+      expected: 'packet parse passes',
+      observed: 'packet parser failed before execution',
+      classification: anomalyPromotionBoundary.ANOMALY_PROMOTION_BOUNDARY_CLASSIFICATIONS.PARSER_BOUNDARY_FAILURE,
+      sourceIds: ['terminal_output_001'],
+      authorityEffect: anomalyPromotionBoundary.ANOMALY_PROMOTION_BOUNDARY_AUTHORITY_EFFECTS.REQUIRE_REPAIR_PLAN,
+      nextRequired: 'repair_plan_or_inquiry',
+      status: anomalyPromotionBoundary.ANOMALY_PROMOTION_BOUNDARY_STATUSES.ACTIVE,
+      createdAt: '2026-05-16T00:00:00.000Z',
+      ...overrides
+    });
+  }
+
+  function testAnomalyPromotionBoundaryValidation() {
+    const record = makeValidAnomalyPromotionRecord();
+    const validation = anomalyPromotionBoundary.validateAnomalyPromotionRecord(record);
+
+    assertAnomalyPromotionBoundary(validation.valid === true, 'valid anomaly record should pass validation');
+    assertAnomalyPromotionBoundary(validation.errors.length === 0, 'valid anomaly record should have no errors');
+
+    const summary = anomalyPromotionBoundary.summarizeAnomalyPromotionRecord(record);
+    assertAnomalyPromotionBoundary(summary.valid === true, 'summary should preserve valid state');
+    assertAnomalyPromotionBoundary(summary.classification === record.classification, 'summary should expose classification');
+  }
+
+  function testAnomalyPromotionBoundaryRequiresExpectedAndObserved() {
+    const missingExpected = makeValidAnomalyPromotionRecord({ expected: '' });
+    const missingObserved = makeValidAnomalyPromotionRecord({ observed: '' });
+
+    const expectedValidation = anomalyPromotionBoundary.validateAnomalyPromotionRecord(missingExpected);
+    const observedValidation = anomalyPromotionBoundary.validateAnomalyPromotionRecord(missingObserved);
+
+    assertAnomalyPromotionBoundary(expectedValidation.valid === false, 'missing expected should fail validation');
+    assertAnomalyPromotionBoundary(observedValidation.valid === false, 'missing observed should fail validation');
+    assertAnomalyPromotionBoundary(
+      expectedValidation.errors.some((error) => error.includes('expected')),
+      'missing expected should produce expected error'
+    );
+    assertAnomalyPromotionBoundary(
+      observedValidation.errors.some((error) => error.includes('observed')),
+      'missing observed should produce observed error'
+    );
+  }
+
+  function testAnomalyPromotionBoundaryBlocksAuthorityGrant() {
+    const blockedRecord = makeValidAnomalyPromotionRecord({
+      authorityEffect: 'grant_implementation'
+    });
+
+    const validation = anomalyPromotionBoundary.validateAnomalyPromotionRecord(blockedRecord);
+    const authorityCheck = anomalyPromotionBoundary.assertAnomalyPromotionDoesNotGrantAuthority(blockedRecord);
+
+    assertAnomalyPromotionBoundary(validation.valid === false, 'grant_implementation should fail validation');
+    assertAnomalyPromotionBoundary(authorityCheck.ok === false, 'grant_implementation should fail authority check');
+    assertAnomalyPromotionBoundary(
+      validation.errors.some((error) => error.includes('authorityEffect')),
+      'blocked authority effect should produce authorityEffect error'
+    );
+  }
+
+  function testAnomalyPromotionBoundaryClassifiesKnownRecentFailures() {
+    const classifications = anomalyPromotionBoundary.ANOMALY_PROMOTION_BOUNDARY_CLASSIFICATIONS;
+    const recentFailures = [
+      classifications.STALE_CONTINUITY_CONFLICT,
+      classifications.UNEXPECTED_MISSING_PATH,
+      classifications.PARSER_BOUNDARY_FAILURE,
+      classifications.REVIEW_BOUNDARY_FALSE_POSITIVE,
+      classifications.PACKET_SURFACE_HYGIENE_VIOLATION
+    ];
+
+    for (const classification of recentFailures) {
+      const record = makeValidAnomalyPromotionRecord({ classification });
+      const result = anomalyPromotionBoundary.classifyAnomalyPromotionRecord(record);
+      assertAnomalyPromotionBoundary(result.valid === true, `classification should be valid: ${classification}`);
+      assertAnomalyPromotionBoundary(result.classification === classification, `classification should round-trip: ${classification}`);
+    }
+  }
+
+  function testAnomalyPromotionBoundaryRequiresRepairOrInquiryNextStep() {
+    const record = makeValidAnomalyPromotionRecord({
+      authorityEffect: anomalyPromotionBoundary.ANOMALY_PROMOTION_BOUNDARY_AUTHORITY_EFFECTS.BLOCK_CONTINUATION,
+      nextRequired: 'require_repair_plan'
+    });
+
+    const result = anomalyPromotionBoundary.classifyAnomalyPromotionRecord(record);
+    const authorityCheck = anomalyPromotionBoundary.assertAnomalyPromotionDoesNotGrantAuthority(record);
+
+    assertAnomalyPromotionBoundary(result.valid === true, 'block-continuation anomaly should classify');
+    assertAnomalyPromotionBoundary(result.nextRequired === 'require_repair_plan', 'nextRequired should preserve repair path');
+    assertAnomalyPromotionBoundary(authorityCheck.ok === true, 'non-grant authority effect should pass authority check');
+  }
+
+  testAnomalyPromotionBoundaryValidation();
+  testAnomalyPromotionBoundaryRequiresExpectedAndObserved();
+  testAnomalyPromotionBoundaryBlocksAuthorityGrant();
+  testAnomalyPromotionBoundaryClassifiesKnownRecentFailures();
+  testAnomalyPromotionBoundaryRequiresRepairOrInquiryNextStep();
+
+  console.log('AnomalyPromotionBoundaryImplementation v1 tests passed');
+})();
+// END AnomalyPromotionBoundaryImplementation v1 tests

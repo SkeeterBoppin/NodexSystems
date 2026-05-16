@@ -3787,6 +3787,127 @@ async function run() {
   testEvolutionCandidateWorkspaceLocation();
   testBestCandidateSelection();
 
+  // BEGIN SyncFinalizationRuleImplementation v1 tests
+  (() => {
+    const {
+      SYNC_FINALIZATION_RULE_MANIFEST_VERSION,
+      SYNC_FINALIZATION_RULE_FAILURE_CLASS,
+      SYNC_FINALIZATION_RULE_BLOCKED_CONVERSIONS,
+      SYNC_FINALIZATION_RULE_ALLOWED_CLASSIFICATIONS,
+      buildSyncFinalizationRuleManifest,
+      classifySyncLifecycleMarkerState,
+      validateSyncFinalizationRuleManifest,
+      assertSyncFinalizationRuleManifest
+    } = require("../core/syncFinalizationRuleManifest");
+
+    function testSyncFinalizationRuleManifestMetadataOnlyAuthorityFlags() {
+      const manifest = buildSyncFinalizationRuleManifest();
+
+      assert.strictEqual(manifest.version, SYNC_FINALIZATION_RULE_MANIFEST_VERSION);
+      assert.strictEqual(validateSyncFinalizationRuleManifest(manifest).valid, true);
+      assert.strictEqual(assertSyncFinalizationRuleManifest(manifest), true);
+      assert.strictEqual(manifest.metadataOnly, true);
+      assert.strictEqual(manifest.authorityGranted, false);
+      assert.strictEqual(manifest.implementationAuthorityGranted, false);
+      assert.strictEqual(manifest.sourceMutationAuthorityGranted, false);
+      assert.strictEqual(manifest.liveContextMutationAuthorityGranted, false);
+      assert.strictEqual(manifest.commitAuthorityGranted, false);
+      assert.strictEqual(manifest.pushAuthorityGranted, false);
+      assert.strictEqual(manifest.runtimeExecutionAuthorityGranted, false);
+      assert.strictEqual(manifest.toolExecutionAuthorityGranted, false);
+      assert.strictEqual(manifest.modelOutputAuthorityGranted, false);
+      assert.strictEqual(manifest.packetExecutionByNodexAuthorityGranted, false);
+      assert.strictEqual(manifest.authorityExpansionGranted, false);
+    }
+
+    function testSyncFinalizationRuleClassifiesPostPushAdvisoryMarkerStaleness() {
+      const classified = classifySyncLifecycleMarkerState({
+        terminalEvidencePassed: true,
+        localRemoteRefsVerified: true,
+        markerGeneratedBeforeSyncCompletion: true,
+        markerLatestCompletedSeam: "LiveContextUpdateExecution v1",
+        markerCurrentOpenSeam: "LiveContextUpdateCommitPlan v1",
+        evidenceLatestCompletedSeam: "LiveContextUpdatePushExecution v1",
+        evidenceCurrentOpenSeam: "MasterSourceCheck v1",
+        expectedNextSeam: "MasterSourceCheck v1"
+      });
+
+      assert.strictEqual(classified.classification, SYNC_FINALIZATION_RULE_FAILURE_CLASS);
+      assert.strictEqual(classified.conflict, false);
+      assert.strictEqual(classified.markerAdvisoryStale, true);
+      assert.strictEqual(classified.authoritativeSource, "terminal_evidence");
+      assert.strictEqual(classified.markerTextAuthority, false);
+      assert.strictEqual(classified.terminalEvidenceAuthority, true);
+      assert.strictEqual(classified.allowedNextSeam, "MasterSourceCheck v1");
+    }
+
+    function testSyncFinalizationRuleBlocksStaleMarkerToNewSyncLoop() {
+      const classified = classifySyncLifecycleMarkerState({
+        pushEvidencePassed: true,
+        localRemoteRefsMatch: true,
+        markerGeneratedBeforeSyncCompletion: true,
+        expectedNextSeam: "MasterSourceCheck v1"
+      });
+
+      assert.strictEqual(classified.startMarkerSyncLoop, false);
+      assert(SYNC_FINALIZATION_RULE_BLOCKED_CONVERSIONS.includes("stale_marker_to_new_marker_sync_loop"));
+      assert(classified.blockedConversions.includes("stale_marker_to_new_marker_sync_loop"));
+      assert(classified.blockedConversions.includes("marker_text_to_authority_over_local_evidence"));
+      assert.strictEqual(new Set(classified.blockedConversions).size, classified.blockedConversions.length);
+    }
+
+    function testSyncFinalizationRulePreservesLocalEvidenceOverMarkerText() {
+      const manifest = buildSyncFinalizationRuleManifest();
+      const classified = classifySyncLifecycleMarkerState({
+        terminalEvidencePassed: true,
+        localRemoteRefsVerified: true,
+        markerLatestCompletedSeam: "LiveContextUpdateExecution v1",
+        evidenceLatestCompletedSeam: "LiveContextUpdatePushExecution v1",
+        expectedNextSeam: "SyncFinalizationRulePlan v1"
+      });
+
+      assert.strictEqual(manifest.terminalEvidenceOutranksMarkerText, true);
+      assert.strictEqual(manifest.markerTextAuthority, false);
+      assert.strictEqual(manifest.sourceHierarchy[0], "live_terminal_output");
+      assert.strictEqual(classified.authoritativeSource, "terminal_evidence");
+      assert.strictEqual(classified.markerTextAuthority, false);
+      assert.strictEqual(classified.allowedNextSeam, "SyncFinalizationRulePlan v1");
+    }
+
+    function testSyncFinalizationRuleRejectsMalformedManifestObjects() {
+      const authorityGrant = buildSyncFinalizationRuleManifest({
+        authorityGranted: true
+      });
+      const authorityValidation = validateSyncFinalizationRuleManifest(authorityGrant);
+      assert.strictEqual(authorityValidation.valid, false);
+      assert(authorityValidation.errors.some(error => error.includes("authorityGranted")));
+
+      const missingRequirement = buildSyncFinalizationRuleManifest({
+        ruleRequirements: ["final_sync_state_from_terminal_evidence_after_push"]
+      });
+      const requirementValidation = validateSyncFinalizationRuleManifest(missingRequirement);
+      assert.strictEqual(requirementValidation.valid, false);
+      assert(requirementValidation.errors.some(error => error.includes("ruleRequirements")));
+
+      const badClassifications = buildSyncFinalizationRuleManifest({
+        allowedClassifications: ["advisory_marker_stale_after_sync_lifecycle"]
+      });
+      const classificationValidation = validateSyncFinalizationRuleManifest(badClassifications);
+      assert.strictEqual(classificationValidation.valid, false);
+      assert(classificationValidation.errors.some(error => error.includes("allowedClassifications")));
+
+      assert.throws(() => assertSyncFinalizationRuleManifest(authorityGrant), /authorityGranted/i);
+      assert(SYNC_FINALIZATION_RULE_ALLOWED_CLASSIFICATIONS.includes("marker_snapshot_not_current_authority"));
+    }
+
+    testSyncFinalizationRuleManifestMetadataOnlyAuthorityFlags();
+    testSyncFinalizationRuleClassifiesPostPushAdvisoryMarkerStaleness();
+    testSyncFinalizationRuleBlocksStaleMarkerToNewSyncLoop();
+    testSyncFinalizationRulePreservesLocalEvidenceOverMarkerText();
+    testSyncFinalizationRuleRejectsMalformedManifestObjects();
+    console.log("SyncFinalizationRuleImplementation v1 tests passed");
+  })();
+  // END SyncFinalizationRuleImplementation v1 tests
   // BEGIN FileOperationCapabilityHardeningImplementation v1 tests
 (() => {
   const assert = require('assert');
